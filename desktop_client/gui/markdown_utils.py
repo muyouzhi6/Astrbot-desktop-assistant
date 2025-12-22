@@ -32,10 +32,12 @@ class MarkdownLabel(QTextBrowser):
         self._original_pixmaps = {}
         
         self._role = role
+        self._original_text = ""  # 保存原始 Markdown 文本用于主题更新
         self.set_markdown(text)
         
     def set_markdown(self, text: str):
         """设置 Markdown 文本"""
+        self._original_text = text  # 保存原始文本
         html = MarkdownUtils.render(text, self._role)
         self.setHtml(html)
         # 调整高度以适应内容
@@ -44,13 +46,14 @@ class MarkdownLabel(QTextBrowser):
         self.setFixedHeight(int(h) + 10)
         
     def update_theme(self):
-        """更新主题"""
-        # 重新渲染当前内容
-        # 由于我们只存了 HTML，没存原始 text，这里可能有点问题。
-        # 但通常 MarkdownLabel 是一次性生成的。
-        # 如果需要动态更新主题，最好保存原始 text。
-        # 简单起见，这里假设外部会调用 set_markdown 或者我们需要保存 text.
-        pass
+        """更新主题 - 重新渲染内容以应用新主题颜色"""
+        if self._original_text:
+            html = MarkdownUtils.render(self._original_text, self._role)
+            self.setHtml(html)
+            # 调整高度以适应内容
+            self.document().adjustSize()
+            h = self.document().size().height()
+            self.setFixedHeight(int(h) + 10)
     
     def loadResource(self, resource_type, name):
         """重写资源加载，缓存图片用于预览"""
@@ -196,15 +199,17 @@ class MarkdownUtils:
             link_color = c.primary
             
             if theme.type == ThemeType.DARK:
-                code_bg = "#2d2d2d"
-                code_fg = "#e0e0e0"
-                border_color = c.border_light
-                blockquote_bg = c.bg_tertiary
+                # 深色模式下，代码块背景要比气泡背景更深或更浅，以形成对比
+                # 气泡背景通常是 bg_secondary 或 bubble_ai_bg
+                code_bg = "rgba(0, 0, 0, 0.3)" # 半透明黑，叠加在任何深色背景上都会更深
+                code_fg = "#f0f0f0"
+                border_color = "rgba(255, 255, 255, 0.2)"
+                blockquote_bg = "rgba(255, 255, 255, 0.1)" # 半透明白，提亮引用块
             else:
                 code_bg = "#f6f8fa"
                 code_fg = "#24292e"
                 border_color = c.border_base
-                blockquote_bg = c.bg_tertiary
+                blockquote_bg = "rgba(0, 0, 0, 0.05)" # 半透明黑
 
         # 配置 Markdown 扩展
         pygments_style = 'monokai' if theme.type == ThemeType.DARK and role != "user" else 'default'
@@ -268,18 +273,19 @@ class MarkdownUtils:
             pre {{
                 background-color: {code_bg};
                 color: {code_fg};
-                padding: 8px;
-                border-radius: 4px;
+                padding: 10px;
+                border-radius: 6px;
+                border: 1px solid {border_color};
                 font-family: Consolas, Monaco, "Courier New", monospace;
-                margin: 6px 0;
+                margin: 8px 0;
                 white-space: pre-wrap;
             }}
             
             code {{
                 background-color: {code_bg};
                 color: {code_fg};
-                padding: 2px 4px;
-                border-radius: 3px;
+                padding: 2px 5px;
+                border-radius: 4px;
                 font-family: Consolas, Monaco, "Courier New", monospace;
             }}
             

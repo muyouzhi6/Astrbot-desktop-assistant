@@ -114,13 +114,10 @@ class CompactChatWindow(QWidget):
         container_layout.setContentsMargins(12, 12, 12, 12)
         container_layout.setSpacing(8)
         
-        # 1. 顶部栏 (标题 + 关闭)
+        # 1. 顶部栏 (关闭按钮)
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(0, 0, 0, 0)
         
-        self._title_label = QLabel("AstrBot")
-        self._title_label.setObjectName("compactTitle")
-        top_bar.addWidget(self._title_label)
         top_bar.addStretch()
         
         self._close_btn = QPushButton("×")
@@ -219,8 +216,11 @@ class CompactChatWindow(QWidget):
         self._chat_history.messages_cleared.connect(self._on_history_cleared)
         self._chat_history.history_loaded.connect(self._on_history_loaded)
         
-        # 加载历史记录
-        self._load_history()
+        # 延迟加载历史记录，确保头像已设置
+        # 注意：实际头像设置在 FloatingBallWindow 构造后调用
+        # 使用 QTimer 延迟加载，给外部设置头像的机会
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, self._load_history)
         
     def _on_theme_changed(self, theme: Theme):
         self._apply_theme()
@@ -235,15 +235,6 @@ class CompactChatWindow(QWidget):
                 background-color: {c.bg_primary};
                 border: 1px solid {c.border_light};
                 border-radius: {t.border_radius + 4}px;
-            }}
-        """)
-        
-        # 标题
-        self._title_label.setStyleSheet(f"""
-            QLabel#compactTitle {{
-                color: {c.text_secondary};
-                font-weight: bold;
-                font-size: {t.font_size_small}px;
             }}
         """)
         
@@ -335,23 +326,41 @@ class CompactChatWindow(QWidget):
             }}
         """)
         
-        # 刷新所有历史消息的样式 (主要是 MarkdownLabel)
+        # 刷新所有历史消息的样式 (主要是 MarkdownLabel 和用户消息气泡)
         for i in range(self._history_layout.count()):
             item = self._history_layout.itemAt(i)
             if item and item.widget():
-                widget = item.widget()
-                if isinstance(widget, MarkdownLabel):
-                    widget.update_theme()
-                elif isinstance(widget, QLabel):
-                    # 更新用户消息颜色
+                container = item.widget()
+                # 遍历容器中的所有子组件
+                self._update_widget_theme(container, c, t)
+    
+    def _update_widget_theme(self, widget, c, t):
+        """递归更新组件及其子组件的主题"""
+        if isinstance(widget, MarkdownLabel):
+            widget.update_theme()
+        elif isinstance(widget, QLabel):
+            # 检查是否是用户消息气泡（通过检查样式表中是否包含 bubble 相关颜色）
+            current_style = widget.styleSheet()
+            if 'bubble' in current_style.lower() or 'background-color' in current_style:
+                # 判断是用户消息还是头像标签
+                # 用户消息气泡有 border-radius: 12px 和 padding: 10px
+                if 'border-radius: 12px' in current_style and 'padding: 10px' in current_style:
                     widget.setStyleSheet(f"""
                         QLabel {{
-                            color: {c.text_primary};
-                            background-color: {c.bg_secondary};
-                            border-radius: 8px;
-                            padding: 8px;
+                            color: {c.bubble_user_text};
+                            background-color: {c.bubble_user_bg};
+                            border-radius: 12px;
+                            padding: 10px;
+                            font-family: {t.font_family};
+                            font-size: {t.font_size_base}px;
                         }}
                     """)
+        
+        # 递归处理子组件
+        if hasattr(widget, 'children'):
+            for child in widget.children():
+                if isinstance(child, QWidget):
+                    self._update_widget_theme(child, c, t)
     
     def set_user_avatar(self, avatar_path: str):
         """设置用户头像路径"""
@@ -382,6 +391,27 @@ class CompactChatWindow(QWidget):
                 )
         else:
             self._bot_avatar_pixmap = None
+    
+    def reload_history_display(self):
+        """重新加载历史记录显示（在头像设置后调用）"""
+        # 清空当前显示
+        while self._history_layout.count() > 1:
+            item = self._history_layout.itemAt(0)
+            if item and item.widget():
+                w = item.widget()
+                if w is not None:
+                    self._history_layout.removeWidget(w)
+                    w.deleteLater()
+        
+        self._displayed_message_ids.clear()
+        self._message_labels.clear()
+        
+        # 重新加载显示
+        messages = self._chat_history.get_messages()
+        for msg in messages:
+            self._display_message_from_history(msg)
+        
+        self._scroll_to_bottom()
     
     def _load_history(self):
         """加载聊天历史记录"""
@@ -1301,6 +1331,9 @@ class FloatingBallWindow(QWidget):
         self._compact_window.image_sent.connect(self.image_sent)
         
         # 从配置加载用户和Bot头像并传递给精简窗口
+        user_avatar_loaded = False
+        bot_avatar_loaded = False
+        
         if hasattr(self.config, 'appearance'):
             appearance = getattr(self.config, 'appearance')
             # 加载用户头像
@@ -1311,6 +1344,7 @@ class FloatingBallWindow(QWidget):
                 user_avatar = appearance.get('user_avatar_path', '') or ""
             if user_avatar:
                 self._compact_window.set_user_avatar(user_avatar)
+                user_avatar_loaded = True
             
             # 加载Bot头像
             bot_avatar = ""
@@ -1326,6 +1360,12 @@ class FloatingBallWindow(QWidget):
                     bot_avatar = appearance.get('avatar_path', '') or ""
             if bot_avatar:
                 self._compact_window.set_bot_avatar(bot_avatar)
+                bot_avatar_loaded = True
+        
+        # 如果头像已加载，立即刷新历史显示以确保头像正确显示
+        if user_avatar_loaded or bot_avatar_loaded:
+            # 使用更长的延迟确保头像已完全加载
+            QTimer.singleShot(150, self._compact_window.reload_history_display)
         
         # 呼吸灯动画
         self._breath_timer = QTimer(self)

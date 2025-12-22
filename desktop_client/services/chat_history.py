@@ -101,6 +101,9 @@ class ChatHistoryManager(QObject):
         self._auto_save = True     # 自动保存开关
         self._dirty = False        # 是否有未保存的更改
         
+        # 加载历史记录
+        self.load_from_file()
+        
         ChatHistoryManager._initialized = True
     
     @staticmethod

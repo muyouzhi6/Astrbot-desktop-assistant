@@ -178,10 +178,10 @@ THEME_DARK = Theme(
         bg_tertiary="#2D2D2D",
         bg_hover="#3C3C3C",
         
-        text_primary="#E0E0E0",
-        text_regular="#B0B0B0",
-        text_secondary="#808080",
-        text_placeholder="#606060",
+        text_primary="#FFFFFF",  # 纯白，确保最高对比度
+        text_regular="#E0E0E0",
+        text_secondary="#A0A0A0",
+        text_placeholder="#707070",
         text_inverse="#1E1E1E",
         
         border_base="#404040",
@@ -189,8 +189,8 @@ THEME_DARK = Theme(
         border_lighter="#606060",
         border_extra_light="#707070",
         
-        shadow_base="rgba(0, 0, 0, 0.3)",
-        shadow_light="rgba(0, 0, 0, 0.2)",
+        shadow_base="rgba(0, 0, 0, 0.4)",
+        shadow_light="rgba(0, 0, 0, 0.3)",
         
         ball_bg="#409EFF",
         ball_glow="rgba(64, 158, 255, 0.5)",
@@ -198,7 +198,7 @@ THEME_DARK = Theme(
         bubble_user_bg="#409EFF",
         bubble_user_text="#FFFFFF",
         bubble_ai_bg="#2D2D2D",
-        bubble_ai_text="#E0E0E0",
+        bubble_ai_text="#FFFFFF", # 确保 AI 气泡文字清晰
         bubble_ai_border="#404040",
     ),
 )
@@ -286,10 +286,10 @@ THEME_OCEAN = Theme(
         bg_tertiary="#132F4C",
         bg_hover="#1E3A5F",
         
-        text_primary="#B2BAC2",
-        text_regular="#8C959E",
-        text_secondary="#5B6B7C",
-        text_placeholder="#3E4C5A",
+        text_primary="#E0E6ED",  # 显著提高亮度
+        text_regular="#B0B8C3",  # 显著提高亮度
+        text_secondary="#7A8B9C",
+        text_placeholder="#4F5D6B",
         text_inverse="#0A1929",
         
         border_base="#1E3A5F",
@@ -303,8 +303,8 @@ THEME_OCEAN = Theme(
         
         bubble_user_bg="#00BCD4",
         bubble_ai_bg="#132F4C",
-        bubble_ai_text="#B2BAC2",
-        bubble_ai_border="#1E3A5F",
+        bubble_ai_text="#E0E6ED",  # 与 text_primary 保持一致
+        bubble_ai_border="#2A4A70",  # 稍微加亮边框
     ),
 )
 

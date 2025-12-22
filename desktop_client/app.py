@@ -77,7 +77,7 @@ class DesktopClientApp(QObject):
         print("[DEBUG] run() 开始")
         
         # 1. 初始化 Qt 应用
-        self._app = QApplication.instance()
+        self._app = QApplication.instance()  # type: ignore
         if not self._app:
             self._app = QApplication(sys.argv)
         if self._app:
@@ -172,6 +172,8 @@ class DesktopClientApp(QObject):
         # 创建系统托盘
         print("[DEBUG] 创建系统托盘...")
         from .gui.system_tray import SystemTrayIcon
+        if self._app is None:
+            raise RuntimeError("QApplication not initialized")
         self._system_tray = SystemTrayIcon(self._app)
         self._system_tray.show_chat_requested.connect(self._show_bubble_input)  # 改为显示气泡输入
         self._system_tray.show_settings_requested.connect(self._show_settings)
@@ -181,6 +183,10 @@ class DesktopClientApp(QObject):
         
         # 确保存储目录结构存在
         self._ensure_storage_dirs()
+        
+        # 初始化聊天记录管理器
+        chat_history_path = self.config.storage.chat_history_path
+        get_chat_history_manager(chat_history_path)
         
         # 创建设置窗口
         print("[DEBUG] 创建设置窗口...")
@@ -777,8 +783,16 @@ class DesktopClientApp(QObject):
                 print(f"[DEBUG] 主动对话服务截图目录已更新")
         
         if 'chat_history_path' in storage:
-            self.config.storage.chat_history_path = storage['chat_history_path']
-            print(f"[DEBUG] 聊天记录保存路径已更新: {storage['chat_history_path']}")
+            new_path = storage['chat_history_path']
+            self.config.storage.chat_history_path = new_path
+            print(f"[DEBUG] 聊天记录保存路径已更新: {new_path}")
+            
+            # 通知 ChatHistoryManager 更新路径
+            try:
+                get_chat_history_manager().set_history_path(new_path)
+                print(f"[DEBUG] ChatHistoryManager 路径已同步更新")
+            except Exception as e:
+                print(f"[ERROR] ChatHistoryManager 路径更新失败: {e}")
             
         # 保存配置到文件
         print("[DEBUG] 保存配置...")
