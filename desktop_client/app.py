@@ -25,6 +25,7 @@ from .api_client import AstrBotApiClient
 from .config import ClientConfig, load_config, save_config
 from .bridge import MessageBridge, InputMessage, OutputMessage
 from .services.proactive_dialog import ProactiveDialogService
+from .services import get_chat_history_manager
 
 
 # 配置日志
@@ -55,7 +56,6 @@ class DesktopClientApp(QObject):
         # GUI 组件
         self._app: Optional[QApplication] = None
         self._floating_ball = None
-        self._chat_window = None
         self._settings_window = None
         self._system_tray = None
         
@@ -169,24 +169,18 @@ class DesktopClientApp(QObject):
         self._floating_ball.show()
         print("[DEBUG] 悬浮球创建完成并显示")
         
-        # 创建对话窗口
-        print("[DEBUG] 创建对话窗口...")
-        from .gui.simple_chat_window import SimpleChatWindow
-        self._chat_window = SimpleChatWindow(api_client=self._bridge.api_client, config=self.config)
-        self._chat_window.message_sent.connect(self._on_message_sent)
-        self._chat_window.image_sent.connect(self._on_image_sent)
-        self._chat_window.screenshot_requested.connect(self._on_screenshot)
-        print("[DEBUG] 对话窗口创建完成")
-        
         # 创建系统托盘
         print("[DEBUG] 创建系统托盘...")
         from .gui.system_tray import SystemTrayIcon
         self._system_tray = SystemTrayIcon(self._app)
-        self._system_tray.show_chat_requested.connect(self._show_chat_window)
+        self._system_tray.show_chat_requested.connect(self._show_bubble_input)  # 改为显示气泡输入
         self._system_tray.show_settings_requested.connect(self._show_settings)
         self._system_tray.quit_requested.connect(self._quit)
         self._system_tray.show()
         print("[DEBUG] 系统托盘创建完成")
+        
+        # 确保存储目录结构存在
+        self._ensure_storage_dirs()
         
         # 创建设置窗口
         print("[DEBUG] 创建设置窗口...")
@@ -301,7 +295,7 @@ class DesktopClientApp(QObject):
             if content.strip() in ["[收到语音]", "🔊 [收到语音]"]:
                 return
             
-            # 主动对话响应：只在气泡中显示，不添加到对话窗口历史
+            # 主动对话响应：只在气泡中显示
             if is_proactive_response:
                 if message.streaming:
                     # 流式响应时累积内容
@@ -319,20 +313,13 @@ class DesktopClientApp(QObject):
                 
             if message.streaming:
                 # 流式响应
-                if self._chat_window:
-                    if not self._chat_window._current_ai_bubble:
-                        self._chat_window.start_ai_response()
-                    self._chat_window.update_ai_response(content)
+                if self._floating_ball:
+                    # 只有当气泡正在显示或等待响应时才更新
+                    if self._floating_ball.is_waiting_response() or not self._floating_ball._compact_window.isHidden():
+                         self._floating_ball.update_streaming_response(content)
                     
-                # 同时更新气泡输入框的响应显示（如果正在等待响应）
-                if self._floating_ball and self._floating_ball.is_waiting_response():
-                    self._floating_ball.update_streaming_response(content)
             else:
                 # 完整响应（非流式）
-                if self._chat_window:
-                    self._chat_window.add_ai_message(content)
-                
-                # 同时更新气泡输入框的响应显示
                 if self._floating_ball:
                     if self._floating_ball.is_waiting_response():
                         self._floating_ball.update_streaming_response(content)
@@ -341,6 +328,13 @@ class DesktopClientApp(QObject):
                         # 在气泡中显示摘要
                         summary = content[:100] + "..." if len(content) > 100 else content
                         self._floating_ball.show_bubble(summary)
+                else:
+                    # 没有 UI 实例，直接写入历史
+                    get_chat_history_manager().add_message(
+                        role="assistant",
+                        content=content,
+                        msg_type="text"
+                    )
                     
         elif msg_type == "image":
             # AI 返回的图片
@@ -349,6 +343,10 @@ class DesktopClientApp(QObject):
         elif msg_type == "voice":
             # AI 返回的语音
             self._handle_voice_response(content, message.metadata)
+            
+        elif msg_type == "video":
+            # AI 返回的视频（如果有）
+            self._handle_video_response(content, message.metadata)
                     
         elif msg_type == "end":
             # 主动对话响应结束
@@ -364,10 +362,6 @@ class DesktopClientApp(QObject):
                 self._proactive_response_buffer = ""
                 return
             
-            # 对话窗口完成响应
-            if self._chat_window:
-                self._chat_window.finish_ai_response()
-                
             # 气泡输入框完成响应
             if self._floating_ball and self._floating_ball.is_waiting_response():
                 self._floating_ball.finish_response()
@@ -380,8 +374,6 @@ class DesktopClientApp(QObject):
                 self._proactive_response_buffer = ""
                 return
             
-            if self._chat_window:
-                self._chat_window.add_error_message(content)
             if self._floating_ball:
                 # 如果气泡输入框在等待，也需要结束等待并显示错误
                 if self._floating_ball.is_waiting_response():
@@ -396,23 +388,17 @@ class DesktopClientApp(QObject):
         if self._floating_ball and self._floating_ball.has_unread_message():
             self._floating_ball.clear_unread_message()
         
-        action = self.config.interaction.single_click
-        if action == "bubble":
-            self._show_bubble_input()
-        elif action == "window":
-            self._show_chat_window()
+        # 统一只显示气泡/输入框，不再区分模式
+        self._show_bubble_input()
             
     def _on_ball_double_clicked(self):
-        """悬浮球双击"""
+        """悬浮球双击：截图并触发主动对话"""
         # 清除未读消息状态
         if self._floating_ball and self._floating_ball.has_unread_message():
             self._floating_ball.clear_unread_message()
         
-        action = self.config.interaction.double_click
-        if action == "bubble":
-            self._show_bubble_input()
-        elif action == "window":
-            self._show_chat_window()
+        print("[DEBUG] 悬浮球双击：触发主动对话截图...")
+        self._do_proactive_screenshot()
             
     def _show_bubble_input(self):
         """显示气泡输入"""
@@ -420,17 +406,12 @@ class DesktopClientApp(QObject):
             self._floating_ball.show_input()
             
     def _show_chat_window(self):
-        """显示对话窗口"""
-        if self._chat_window:
-            self._chat_window.show_and_focus()
+        """显示对话窗口 (兼容旧接口，实际显示气泡输入)"""
+        self._show_bubble_input()
             
     def _toggle_chat_window(self):
-        """切换对话窗口显示"""
-        if self._chat_window:
-            if self._chat_window.isVisible():
-                self._chat_window.hide()
-            else:
-                self._chat_window.show_and_focus()
+        """切换对话窗口显示 (兼容旧接口)"""
+        self._show_bubble_input()
                 
     def _toggle_floating_ball(self):
         """切换悬浮球显示"""
@@ -443,7 +424,7 @@ class DesktopClientApp(QObject):
     def _show_quick_ask(self):
         """显示快速提问"""
         # 打开对话窗口并聚焦输入框
-        self._show_chat_window()
+        self._show_bubble_input()
         
     def _cycle_theme(self):
         """循环切换主题"""
@@ -462,16 +443,9 @@ class DesktopClientApp(QObject):
         try:
             from .gui.screenshot_selector import RegionScreenshotCapture
             
-            # 记录当前对话窗口状态
-            self._chat_was_visible_before_screenshot = (
-                self._chat_window is not None and self._chat_window.isVisible()
-            )
-            
             # 隐藏窗口
             if self._floating_ball:
                 self._floating_ball.hide()
-            if self._chat_window and self._chat_window.isVisible():
-                self._chat_window.hide()
             
             # 使用 QTimer 确保窗口隐藏后再截图
             QTimer.singleShot(100, self._start_region_capture)
@@ -494,16 +468,9 @@ class DesktopClientApp(QObject):
         try:
             from .services.screen_capture import ScreenCaptureService
             
-            # 记录当前对话窗口状态
-            self._chat_was_visible_before_screenshot = (
-                self._chat_window is not None and self._chat_window.isVisible()
-            )
-            
             # 隐藏窗口
             if self._floating_ball:
                 self._floating_ball.hide()
-            if self._chat_window and self._chat_window.isVisible():
-                self._chat_window.hide()
                 
             QTimer.singleShot(100, self._execute_full_screenshot)
         except ImportError as e:
@@ -526,6 +493,53 @@ class DesktopClientApp(QObject):
         except Exception as e:
             print(f"截图失败: {e}")
             self._restore_windows()
+
+    def _do_proactive_screenshot(self):
+        """执行主动对话专用截图"""
+        try:
+            from .services.screen_capture import ScreenCaptureService
+            
+            # 隐藏窗口
+            if self._floating_ball:
+                self._floating_ball.hide()
+                
+            # 延迟执行以确保窗口完全隐藏
+            QTimer.singleShot(100, self._execute_proactive_screenshot)
+        except ImportError as e:
+            print(f"截图服务不可用: {e}")
+
+    def _execute_proactive_screenshot(self):
+        """执行主动对话截图"""
+        try:
+            from .services.screen_capture import ScreenCaptureService
+            
+            # 使用配置的存储路径
+            save_dir = self.config.storage.image_save_path or "./temp/screenshots"
+            service = ScreenCaptureService(save_dir=save_dir)
+            screenshot_path = service.capture_full_screen_to_file()
+            
+            self._restore_windows()
+            
+            if screenshot_path:
+                self._on_proactive_screenshot_complete(screenshot_path)
+        except Exception as e:
+            print(f"主动对话截图失败: {e}")
+            self._restore_windows()
+
+    def _on_proactive_screenshot_complete(self, screenshot_path: str):
+        """主动对话截图完成：直接触发主动对话"""
+        print(f"[DEBUG] 主动对话截图完成: {screenshot_path}")
+        
+        # 将截图作为用户消息添加到历史记录中（显示在对话框里）
+        if self._floating_ball:
+            # 使用空文本，只有图片
+            # 注意：这里我们不调用 self.image_sent 信号，因为这会再次触发 API 请求
+            # 我们只是在本地显示，因为 _on_proactive_dialog_triggered 负责发送 API 请求
+            self._floating_ball.add_user_message(text="", image_path=screenshot_path)
+            # 确保气泡窗口显示
+            self._floating_ball.show_input()
+            
+        asyncio.ensure_future(self._on_proactive_dialog_triggered(screenshot_path))
             
     def _on_screenshot_complete(self, screenshot_path: Optional[str]):
         """截图完成回调"""
@@ -540,19 +554,11 @@ class DesktopClientApp(QObject):
             self._floating_ball.show()
             
     def _handle_screenshot_result(self, screenshot_path: str):
-        """处理截图结果 - 根据对话窗口状态决定粘贴位置"""
-        # 记录截图前对话窗口是否可见
-        chat_was_visible = getattr(self, '_chat_was_visible_before_screenshot', False)
-        
-        if chat_was_visible and self._chat_window:
-            # 对话窗口打开：粘贴到对话窗口输入框
-            self._chat_window.set_attachment(screenshot_path)
-            self._chat_window.show_and_focus()
-        else:
-            # 对话窗口关闭：粘贴到气泡输入框
-            if self._floating_ball:
-                self._floating_ball.set_attachment(screenshot_path)
-                self._floating_ball.show_input()
+        """处理截图结果"""
+        # 粘贴到气泡输入框
+        if self._floating_ball:
+            self._floating_ball.set_attachment(screenshot_path)
+            self._floating_ball.show_input()
             
     def _add_screenshot_to_chat(self, screenshot_path: str):
         """添加截图到对话（旧方法保留兼容）"""
@@ -561,13 +567,6 @@ class DesktopClientApp(QObject):
     @asyncSlot(str)
     async def _on_message_sent(self, message: str):
         """处理发送的消息 (Async Slot)"""
-        # 判断消息来源：如果对话窗口不可见，则消息来自气泡输入框
-        from_bubble = self._chat_window is None or not self._chat_window.isVisible()
-        
-        if from_bubble and self._chat_window:
-            # 从气泡发送的消息，需要添加用户消息到对话窗口
-            self._chat_window.add_user_message(message)
-            
         # 发送消息到服务器
         await self._bridge.send_input(InputMessage(
             msg_type="text",
@@ -589,68 +588,67 @@ class DesktopClientApp(QObject):
             metadata={"text": text}
         ))
         
+    def _ensure_storage_dirs(self):
+        """确保存储目录结构存在"""
+        base_dir = self.config.storage.image_save_path
+        if not base_dir:
+            base_dir = os.path.join(str(ClientConfig.get_config_dir()), "downloads")
+            
+        self._storage_dirs = {
+            'image': os.path.join(base_dir, 'images'),
+            'voice': os.path.join(base_dir, 'voices'),
+            'video': os.path.join(base_dir, 'videos'),
+            'file': os.path.join(base_dir, 'files')
+        }
+        
+        for dir_path in self._storage_dirs.values():
+            os.makedirs(dir_path, exist_ok=True)
+            
+    def _get_save_path(self, filename: str, msg_type: str) -> str:
+        """获取文件保存路径"""
+        dir_path = self._storage_dirs.get(msg_type, self._storage_dirs['file'])
+        return os.path.join(dir_path, filename)
+
     def _handle_image_response(self, filename: str, metadata: dict):
         """处理 AI 返回的图片"""
-        import asyncio
-        asyncio.ensure_future(self._download_and_show_image(filename))
+        asyncio.ensure_future(self._download_media(filename, "image"))
         
-    async def _download_and_show_image(self, filename: str):
-        """下载并显示图片"""
-        import tempfile
-        import os
-        
-        # 确定保存目录
-        if self.config.storage.image_save_path:
-            save_dir = self.config.storage.image_save_path
-            os.makedirs(save_dir, exist_ok=True)
-            save_path = os.path.join(save_dir, f"{filename}")
-        else:
-            # 创建临时文件保存图片
-            temp_dir = tempfile.gettempdir()
-            save_path = os.path.join(temp_dir, f"astrbot_img_{filename}")
-        
-        success = await self._bridge.api_client.download_file(filename, save_path)
-        
-        if success and os.path.exists(save_path):
-            if self._chat_window:
-                self._chat_window.add_ai_message(save_path, "image")
-            # 在气泡中显示实际图片缩略图
-            if self._floating_ball:
-                # 使用 Markdown 显示图片
-                image_md = f"![image]({save_path})"
-                self._floating_ball.show_bubble(image_md)
-        else:
-            if self._chat_window:
-                self._chat_window.add_error_message(f"图片下载失败: {filename}")
-                
     def _handle_voice_response(self, filename: str, metadata: dict):
         """处理 AI 返回的语音"""
-        import asyncio
-        asyncio.ensure_future(self._download_and_play_voice(filename))
+        asyncio.ensure_future(self._download_media(filename, "voice"))
         
-    async def _download_and_play_voice(self, filename: str):
-        """下载并播放语音"""
-        import tempfile
-        import os
+    def _handle_video_response(self, filename: str, metadata: dict):
+        """处理 AI 返回的视频"""
+        asyncio.ensure_future(self._download_media(filename, "video"))
         
-        # 创建临时文件保存语音
-        temp_dir = tempfile.gettempdir()
-        save_path = os.path.join(temp_dir, f"astrbot_voice_{filename}")
+    async def _download_media(self, filename: str, msg_type: str):
+        """下载媒体文件并显示"""
+        save_path = self._get_save_path(filename, msg_type)
         
         success = await self._bridge.api_client.download_file(filename, save_path)
         
         if success and os.path.exists(save_path):
-            if self._chat_window:
-                self._chat_window.add_ai_message(save_path, "voice")
-            if self._floating_ball:
-                self._floating_ball.show_bubble("🔊 [收到语音]")
+            content = save_path
             
-            # 自动播放语音（如果启用）
-            if self.config.voice.auto_play_voice:
-                self._play_audio(save_path)
+            if msg_type == "voice":
+                # 构建消息内容：path|duration
+                content = f"{save_path}|0"
+            elif msg_type == "video":
+                # 构建消息内容：path|thumbnail|duration (缩略图暂时为空)
+                content = f"{save_path}||0"
+                
+            if self._floating_ball:
+                # show_bubble 会调用 CompactChatWindow.add_ai_message
+                # 它支持自动识别 msg_type 为 voice/video (需要传递 msg_type 参数给 show_bubble，或者让 show_bubble 自动识别？)
+                # 查看 floating_ball.py 的 show_bubble，它只接受 text
+                # 我们需要修改 floating_ball.py 的 show_bubble 支持 msg_type
+                
+                # 暂时通过直接调用 compact_window 的方法来实现
+                self._floating_ball._compact_window.add_ai_message(content, msg_type)
+                self._floating_ball.show_input() # 确保窗口显示
         else:
-            if self._chat_window:
-                self._chat_window.add_error_message(f"语音下载失败: {filename}")
+            if self._floating_ball:
+                self._floating_ball.show_bubble(f"❌ 下载失败: {filename}")
                 
     def _play_audio(self, audio_path: str):
         """播放音频文件"""
@@ -719,13 +717,13 @@ class DesktopClientApp(QObject):
         # 更新对话窗口头像并保存到配置
         if 'user_avatar_path' in appearance:
             self.config.appearance.user_avatar_path = appearance['user_avatar_path']
-            if self._chat_window:
-                self._chat_window.set_user_avatar(appearance['user_avatar_path'])
+            if self._floating_ball:
+                self._floating_ball.set_user_avatar(appearance['user_avatar_path'])
         
         if 'bot_avatar_path' in appearance:
             self.config.appearance.bot_avatar_path = appearance['bot_avatar_path']
-            if self._chat_window:
-                self._chat_window.set_bot_avatar(appearance['bot_avatar_path'])
+            if self._floating_ball:
+                self._floating_ball.set_bot_avatar(appearance['bot_avatar_path'])
 
         if 'ball_size' in appearance:
             self.config.appearance.ball_size = appearance['ball_size']

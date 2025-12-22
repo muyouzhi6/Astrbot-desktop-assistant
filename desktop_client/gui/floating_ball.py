@@ -23,12 +23,21 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QPixmap, QPainter, QBrush, QColor, QMouseEvent,
     QFont, QPen, QLinearGradient, QRadialGradient,
-    QPainterPath
+    QPainterPath, QCursor
 )
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QMenu, QApplication, QFrame, QSizePolicy
+from PySide6.QtWidgets import (
+    QWidget, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QMenu,
+    QApplication, QFrame, QSizePolicy, QTextEdit, QScrollArea,
+    QDialog, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QFileDialog
+)
+from PySide6.QtGui import QClipboard
 
 from .themes import theme_manager, Theme
-from .simple_chat_window import PasteAwareTextEdit, VoiceMessageWidget, format_duration
+from .chat_widgets import (
+    PasteAwareTextEdit, VoiceMessageWidget, VideoMessageWidget,
+    FileMessageWidget, ClickableImageLabel, ImagePreviewDialog,
+    format_duration
+)
 from .markdown_utils import MarkdownLabel
 from ..services import get_chat_history_manager, ChatMessage
 
@@ -42,293 +51,6 @@ class FloatingBallState(Enum):
     UNREAD_MESSAGE = "unread_message"  # 有未读消息
 
 
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QMenu, QApplication, QTextEdit, QScrollArea, QDialog, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QSizePolicy
-from PySide6.QtGui import QClipboard
-
-class ClickableImageLabel(QLabel):
-    """可点击的图片标签，支持点击放大和右键复制"""
-    
-    clicked = Signal()
-    
-    def __init__(self, image_path: str = "", parent=None):
-        super().__init__(parent)
-        self._image_path = image_path
-        self._original_pixmap: Optional[QPixmap] = None
-        self._scaled_size = QSize(0, 0)  # 记录缩放后的尺寸
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._show_context_menu)
-        # 连接点击信号到预览方法
-        self.clicked.connect(self._show_preview)
-        # 设置固定的尺寸策略，防止被拉伸
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        
-        if image_path:
-            self.load_image(image_path)
-            
-    def load_image(self, image_path: str, max_size: int = 200):
-        """加载并缩放图片"""
-        self._image_path = image_path
-        if os.path.exists(image_path):
-            pixmap = QPixmap(image_path)
-            if not pixmap.isNull():
-                self._original_pixmap = pixmap
-                # 缩放为缩略图，限制最大宽高
-                max_width = min(max_size, 200)
-                max_height = 150
-                scaled = pixmap.scaled(
-                    max_width, max_height,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation
-                )
-                self.setPixmap(scaled)
-                # 记录缩放后的尺寸
-                self._scaled_size = scaled.size()
-                # 设置固定尺寸，避免多余空间
-                self.setFixedSize(scaled.width(), scaled.height())
-                # 设置对齐方式
-                self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-    
-    def sizeHint(self):
-        """返回推荐尺寸"""
-        if self._scaled_size.isValid() and not self._scaled_size.isEmpty():
-            return self._scaled_size
-        return super().sizeHint()
-    
-    def minimumSizeHint(self):
-        """返回最小尺寸"""
-        return self.sizeHint()
-                
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
-        
-    def _show_context_menu(self, pos):
-        """显示右键菜单"""
-        menu = QMenu(self)
-        
-        # 应用主题样式
-        t = theme_manager.current_theme
-        c = t.colors
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background-color: {c.bg_primary};
-                border: 1px solid {c.border_light};
-                border-radius: 8px;
-                padding: 4px;
-            }}
-            QMenu::item {{
-                padding: 6px 16px;
-                border-radius: 4px;
-                color: {c.text_primary};
-            }}
-            QMenu::item:selected {{
-                background-color: {c.bg_hover};
-            }}
-        """)
-        
-        copy_action = menu.addAction("📋 复制图片")
-        copy_action.triggered.connect(self._copy_to_clipboard)
-        
-        view_action = menu.addAction("🔍 查看大图")
-        view_action.triggered.connect(self._show_preview)
-        
-        menu.exec(self.mapToGlobal(pos))
-        
-    def _copy_to_clipboard(self):
-        """复制图片到剪贴板"""
-        if self._original_pixmap and not self._original_pixmap.isNull():
-            clipboard = QApplication.clipboard()
-            clipboard.setPixmap(self._original_pixmap)
-            
-    def _show_preview(self):
-        """显示大图预览"""
-        if self._original_pixmap and not self._original_pixmap.isNull():
-            dialog = ImagePreviewDialog(self._original_pixmap, self._image_path, self.window())
-            dialog.exec()
-
-
-class ImagePreviewDialog(QDialog):
-    """图片预览对话框"""
-    
-    def __init__(self, pixmap: QPixmap, image_path: str = "", parent=None):
-        super().__init__(parent)
-        self._pixmap = pixmap
-        self._image_path = image_path
-        
-        self.setWindowTitle("图片预览")
-        self.setModal(True)
-        self.setMinimumSize(400, 300)
-        
-        # 设置窗口标志，确保对话框在最前面显示
-        self.setWindowFlags(
-            Qt.WindowType.Dialog |
-            Qt.WindowType.WindowCloseButtonHint |
-            Qt.WindowType.WindowTitleHint
-        )
-        
-        # 计算合适的窗口大小和位置
-        dialog_width = 800
-        dialog_height = 600
-        
-        screen = QApplication.primaryScreen()
-        if screen:
-            screen_rect = screen.availableGeometry()
-            # 窗口最大为屏幕的 80%
-            max_w = int(screen_rect.width() * 0.8)
-            max_h = int(screen_rect.height() * 0.8)
-            
-            img_w = pixmap.width()
-            img_h = pixmap.height()
-            
-            # 如果图片比最大尺寸小，使用图片原尺寸加一点边距
-            if img_w < max_w and img_h < max_h:
-                dialog_width = min(img_w + 40, max_w)
-                dialog_height = min(img_h + 80, max_h)
-            else:
-                dialog_width = max_w
-                dialog_height = max_h
-                
-            self.resize(dialog_width, dialog_height)
-            
-            # 居中显示 - 使用 availableGeometry 确保在可见区域内
-            center_x = screen_rect.x() + (screen_rect.width() - dialog_width) // 2
-            center_y = screen_rect.y() + (screen_rect.height() - dialog_height) // 2
-            self.move(center_x, center_y)
-        else:
-            self.resize(dialog_width, dialog_height)
-        
-        # 主布局
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # 使用 QGraphicsView 显示图片，支持缩放
-        self._scene = QGraphicsScene()
-        self._view = QGraphicsView(self._scene)
-        self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        self._view.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        self._view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        
-        # 添加图片到场景
-        self._pixmap_item = QGraphicsPixmapItem(pixmap)
-        self._scene.addItem(self._pixmap_item)
-        
-        layout.addWidget(self._view, 1)
-        
-        # 底部按钮区
-        btn_frame = QFrame()
-        btn_layout = QHBoxLayout(btn_frame)
-        btn_layout.setContentsMargins(12, 8, 12, 8)
-        
-        # 复制按钮
-        copy_btn = QPushButton("📋 复制到剪贴板")
-        copy_btn.clicked.connect(self._copy_to_clipboard)
-        
-        # 下载按钮
-        download_btn = QPushButton("💾 下载图片")
-        download_btn.clicked.connect(self._download_image)
-        
-        # 适应窗口按钮
-        fit_btn = QPushButton("📐 适应窗口")
-        fit_btn.clicked.connect(self._fit_to_window)
-        
-        # 原始大小按钮
-        original_btn = QPushButton("1:1 原始大小")
-        original_btn.clicked.connect(self._show_original_size)
-        
-        # 关闭按钮
-        close_btn = QPushButton("关闭")
-        close_btn.clicked.connect(self.close)
-        
-        btn_layout.addWidget(copy_btn)
-        btn_layout.addWidget(download_btn)
-        btn_layout.addWidget(fit_btn)
-        btn_layout.addWidget(original_btn)
-        btn_layout.addStretch()
-        btn_layout.addWidget(close_btn)
-        
-        layout.addWidget(btn_frame)
-        
-        # 应用主题
-        self._apply_theme()
-        
-        # 默认适应窗口显示
-        QTimer.singleShot(50, self._fit_to_window)
-        
-    def _apply_theme(self):
-        """应用主题样式"""
-        t = theme_manager.current_theme
-        c = t.colors
-        
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {c.bg_primary};
-            }}
-            QGraphicsView {{
-                background-color: {c.bg_secondary};
-                border: none;
-            }}
-            QPushButton {{
-                background-color: {c.bg_secondary};
-                color: {c.text_primary};
-                border: 1px solid {c.border_light};
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: {t.font_size_base}px;
-            }}
-            QPushButton:hover {{
-                background-color: {c.bg_hover};
-            }}
-        """)
-        
-    def _copy_to_clipboard(self):
-        """复制图片到剪贴板"""
-        clipboard = QApplication.clipboard()
-        clipboard.setPixmap(self._pixmap)
-        
-    def _download_image(self):
-        """下载图片到本地"""
-        from PySide6.QtWidgets import QFileDialog
-        
-        # 确定默认文件名
-        default_name = "image.png"
-        if self._image_path and os.path.exists(self._image_path):
-            default_name = os.path.basename(self._image_path)
-        
-        # 打开保存对话框
-        file_path, selected_filter = QFileDialog.getSaveFileName(
-            self,
-            "保存图片",
-            default_name,
-            "PNG 图片 (*.png);;JPEG 图片 (*.jpg *.jpeg);;所有文件 (*.*)"
-        )
-        
-        if file_path:
-            # 根据扩展名确定格式
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext in ['.jpg', '.jpeg']:
-                self._pixmap.save(file_path, "JPEG", 95)
-            else:
-                self._pixmap.save(file_path, "PNG")
-        
-    def _fit_to_window(self):
-        """适应窗口显示"""
-        self._view.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
-        
-    def _show_original_size(self):
-        """显示原始大小"""
-        self._view.resetTransform()
-        
-    def wheelEvent(self, event):
-        """鼠标滚轮缩放"""
-        factor = 1.15
-        if event.angleDelta().y() > 0:
-            self._view.scale(factor, factor)
-        else:
-            self._view.scale(1 / factor, 1 / factor)
 
 
 class CompactChatWindow(QWidget):
@@ -338,8 +60,9 @@ class CompactChatWindow(QWidget):
     image_sent = Signal(str, str) # path, text
     closed = Signal()
     
-    def __init__(self, parent=None, max_history: int = 50):
+    def __init__(self, parent=None, max_history: int = 50, config=None):
         super().__init__(parent)
+        self._config = config
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -370,6 +93,12 @@ class CompactChatWindow(QWidget):
         self._user_avatar_pixmap: Optional[QPixmap] = None
         self._bot_avatar_pixmap: Optional[QPixmap] = None
         
+        # 调整大小相关状态
+        self._resizing = False
+        self._resize_edge = None # 'left', 'right', 'top', 'bottom', 'top-left', etc.
+        self._resize_margin = 6
+        self._last_pos = QPoint()
+        
         # 主容器
         self._container = QFrame()
         self._container.setObjectName("compactContainer")
@@ -381,6 +110,7 @@ class CompactChatWindow(QWidget):
         
         # 容器内布局
         container_layout = QVBoxLayout(self._container)
+        # 增加边距以便更容易拖动（虽然这里是内部布局，外部调整大小靠鼠标事件）
         container_layout.setContentsMargins(12, 12, 12, 12)
         container_layout.setSpacing(8)
         
@@ -410,10 +140,10 @@ class CompactChatWindow(QWidget):
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        # 设置固定宽度，避免布局问题
-        self.setMinimumWidth(320)
-        self.setMaximumWidth(380)
-        self.setFixedWidth(360)
+        # 设置初始大小和最小大小，允许调整
+        self.setMinimumWidth(300)
+        self.setMinimumHeight(200)
+        self.resize(360, 480) # 默认大小
         
         self._history_widget = QWidget()
         self._history_layout = QVBoxLayout(self._history_widget)
@@ -449,9 +179,19 @@ class CompactChatWindow(QWidget):
         input_layout = QHBoxLayout()
         input_layout.setSpacing(8)
         
+        # 附件按钮
+        self._attach_btn = QPushButton("📎")
+        self._attach_btn.setObjectName("compactAttachBtn")
+        self._attach_btn.setFixedSize(32, 40)
+        self._attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._attach_btn.setToolTip("发送图片/附件")
+        self._attach_btn.clicked.connect(self._on_attach_clicked)
+        input_layout.addWidget(self._attach_btn)
+        
         self._input = PasteAwareTextEdit()
         self._input.setPlaceholderText("输入消息...")
         self._input.setFixedHeight(40)
+        self._input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._input.image_pasted.connect(self.set_attachment)
         self._input.enter_pressed.connect(self._send)
         input_layout.addWidget(self._input)
@@ -464,6 +204,10 @@ class CompactChatWindow(QWidget):
         input_layout.addWidget(self._send_btn)
         
         container_layout.addLayout(input_layout)
+        
+        # 启用鼠标追踪以支持边缘检测
+        self.setMouseTracking(True)
+        self._container.setMouseTracking(True)
         
         # 应用主题
         self._apply_theme()
@@ -577,6 +321,20 @@ class CompactChatWindow(QWidget):
             }}
         """)
         
+        # 附件按钮
+        self._attach_btn.setStyleSheet(f"""
+            QPushButton#compactAttachBtn {{
+                background-color: {c.bg_secondary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                border-radius: {t.border_radius}px;
+                font-size: 16px;
+            }}
+            QPushButton#compactAttachBtn:hover {{
+                background-color: {c.bg_hover};
+            }}
+        """)
+        
         # 刷新所有历史消息的样式 (主要是 MarkdownLabel)
         for i in range(self._history_layout.count()):
             item = self._history_layout.itemAt(i)
@@ -648,8 +406,15 @@ class CompactChatWindow(QWidget):
         else:
             # AI消息
             if msg.msg_type == "voice":
-                # 语音消息：使用 content 解析音频路径和时长
                 self._display_ai_voice(msg.content, msg.id)
+            elif msg.msg_type == "video":
+                self._display_ai_video(msg.content, msg.id)
+            elif msg.msg_type == "image":
+                # 优先使用 file_path，如果没有则尝试从 content 解析
+                image_path = msg.file_path or msg.content
+                self._display_ai_image(image_path, msg.id)
+            elif msg.msg_type == "file":
+                self._display_ai_file(msg.content, msg.id)
             else:
                 label = self._display_ai_text(msg.content, msg.id)
                 if label:
@@ -658,12 +423,15 @@ class CompactChatWindow(QWidget):
     def _display_user_text(self, text: str):
         """显示用户文本消息（仅UI，不添加到历史）"""
         container = QWidget()
-        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(8)
+        
+        # 弹性空间，将内容推到右边
         layout.addStretch()
         
+        # 文本气泡
         lbl = QLabel(text)
         lbl.setWordWrap(True)
         lbl.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
@@ -671,16 +439,35 @@ class CompactChatWindow(QWidget):
         c = t.colors
         lbl.setStyleSheet(f"""
             QLabel {{
-                color: {c.text_primary};
-                background-color: {c.bg_secondary};
-                border-radius: 8px;
-                padding: 8px;
+                color: {c.bubble_user_text};
+                background-color: {c.bubble_user_bg};
+                border-radius: 12px;
+                padding: 10px;
+                font-family: {t.font_family};
+                font-size: {t.font_size_base}px;
             }}
         """)
-        lbl.setMaximumWidth(240)
+        # 最大宽度为窗口宽度的 70% 左右
+        lbl.setMaximumWidth(int(self.width() * 0.7))
         layout.addWidget(lbl)
-        container.adjustSize()
         
+        # 用户头像
+        avatar = QLabel()
+        avatar.setFixedSize(32, 32)
+        avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
+        if self._user_avatar_pixmap and not self._user_avatar_pixmap.isNull():
+            circular_avatar = self._create_circular_avatar(self._user_avatar_pixmap, 32)
+            avatar.setPixmap(circular_avatar)
+            avatar.setStyleSheet("background: transparent;")
+        else:
+            avatar.setText("👤")
+            avatar.setStyleSheet(f"font-size: 20px; background-color: {c.primary}; border-radius: 16px; color: white;")
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+        layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
+        
+        container.adjustSize()
         self._add_to_history(container, is_image=False)
     
     def _display_user_image(self, image_path: str):
@@ -688,14 +475,36 @@ class CompactChatWindow(QWidget):
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(8)
+        
+        # 弹性空间
         layout.addStretch()
         
         lbl = ClickableImageLabel(image_path)
-        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(lbl)
+        
+        # 用户头像
+        avatar = QLabel()
+        avatar.setFixedSize(32, 32)
+        avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
+        t = theme_manager.current_theme
+        c = t.colors
+        
+        if self._user_avatar_pixmap and not self._user_avatar_pixmap.isNull():
+            circular_avatar = self._create_circular_avatar(self._user_avatar_pixmap, 32)
+            avatar.setPixmap(circular_avatar)
+            avatar.setStyleSheet("background: transparent;")
+        else:
+            avatar.setText("👤")
+            avatar.setStyleSheet(f"font-size: 20px; background-color: {c.primary}; border-radius: 16px; color: white;")
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+        layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
+        
         container.adjustSize()
-        container.setFixedHeight(lbl.height())
+        # container.setFixedHeight(lbl.height()) # 移除固定高度，让布局自动适应
         
         self._add_to_history(container, is_image=True)
     
@@ -709,21 +518,26 @@ class CompactChatWindow(QWidget):
         
         # 机器人头像
         avatar = QLabel()
-        avatar.setFixedSize(24, 24)
+        avatar.setFixedSize(32, 32)
         avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
+        t = theme_manager.current_theme
+        c = t.colors
+        
         if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
-            circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 24)
+            circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
             avatar.setText("🤖")
-            avatar.setStyleSheet("font-size: 16px;")
+            avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
         
         md_label = MarkdownLabel(text, parent=container)
-        md_label.setMaximumWidth(260)
+        # 最大宽度为窗口宽度的 75%
+        md_label.setMaximumWidth(int(self.width() * 0.75))
         md_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
         layout.addWidget(md_label)
         
@@ -733,7 +547,119 @@ class CompactChatWindow(QWidget):
         self._add_to_history(container)
         
         return md_label
+
+    def _display_ai_image(self, image_path: str, message_id: str = ""):
+        """显示AI图片消息"""
+        container = QWidget()
+        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        
+        # 机器人头像
+        avatar = QLabel()
+        avatar.setFixedSize(32, 32)
+        avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
+        t = theme_manager.current_theme
+        c = t.colors
+        
+        if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
+            circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
+            avatar.setPixmap(circular_avatar)
+            avatar.setStyleSheet("background: transparent;")
+        else:
+            avatar.setText("🤖")
+            avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
+        
+        lbl = ClickableImageLabel(image_path)
+        layout.addWidget(lbl)
+        layout.addStretch()
+        
+        self._add_to_history(container, is_image=True)
+
+    def _display_ai_file(self, content: str, message_id: str = ""):
+        """显示AI文件消息"""
+        # content format: path|name|size
+        parts = content.split("|")
+        file_path = parts[0]
+        file_name = parts[1] if len(parts) > 1 else ""
+        file_size = int(parts[2]) if len(parts) > 2 else 0
+        
+        container = QWidget()
+        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        
+        # 机器人头像
+        avatar = QLabel()
+        avatar.setFixedSize(32, 32)
+        avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
+        t = theme_manager.current_theme
+        c = t.colors
+        
+        if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
+            circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
+            avatar.setPixmap(circular_avatar)
+            avatar.setStyleSheet("background: transparent;")
+        else:
+            avatar.setText("🤖")
+            avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
+        
+        file_widget = FileMessageWidget(file_path, file_name, file_size)
+        file_widget.setMaximumWidth(260)
+        layout.addWidget(file_widget)
+        layout.addStretch()
+        
+        self._add_to_history(container)
     
+    def _display_ai_video(self, content: str, message_id: str = ""):
+        """显示AI视频消息（仅UI，不添加到历史）"""
+        # 解析内容: path|thumbnail|duration
+        parts = content.split("|")
+        video_path = parts[0].strip()
+        thumbnail = parts[1] if len(parts) > 1 else ""
+        duration = float(parts[2]) if len(parts) > 2 else 0
+        
+        container = QWidget()
+        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        
+        # 机器人头像
+        avatar = QLabel()
+        avatar.setFixedSize(32, 32)
+        avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
+        if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
+            circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
+            avatar.setPixmap(circular_avatar)
+            avatar.setStyleSheet("background: transparent;")
+        else:
+            avatar.setText("🤖")
+            avatar.setStyleSheet("font-size: 20px;")
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
+        
+        video_widget = VideoMessageWidget(video_path, thumbnail, duration, parent=container)
+        video_widget.setMaximumWidth(260)
+        layout.addWidget(video_widget)
+        
+        layout.addStretch()
+        container.adjustSize()
+        
+        self._add_to_history(container)
+
     def _display_ai_voice(self, content: str, message_id: str = ""):
         """显示AI语音消息（仅UI，不添加到历史）
         
@@ -760,16 +686,17 @@ class CompactChatWindow(QWidget):
         
         # 机器人头像
         avatar = QLabel()
-        avatar.setFixedSize(24, 24)
+        avatar.setFixedSize(32, 32)
         avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
         if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
-            circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 24)
+            circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
             avatar.setText("🤖")
-            avatar.setStyleSheet("font-size: 16px;")
+            avatar.setStyleSheet("font-size: 20px;")
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
         
@@ -789,6 +716,29 @@ class CompactChatWindow(QWidget):
         
         self._display_message_from_history(msg)
         self._scroll_to_bottom()
+        
+        # 自动播放语音逻辑
+        if msg.role == "assistant" and msg.msg_type == "voice":
+            should_play = False
+            if self._config:
+                if hasattr(self._config, 'voice') and hasattr(self._config.voice, 'auto_play_voice'):
+                     should_play = self._config.voice.auto_play_voice
+                elif isinstance(self._config, dict):
+                     if 'voice' in self._config:
+                         should_play = self._config['voice'].get('auto_play_voice', False)
+                     else:
+                         should_play = self._config.get('auto_play_voice', False)
+
+            if should_play:
+                # 查找最后添加的 widget (它是 container，包含 voice_widget)
+                if self._history_layout.count() > 1:
+                    container_item = self._history_layout.itemAt(self._history_layout.count() - 2)
+                    if container_item:
+                        container = container_item.widget()
+                        if container:
+                            voice_widget = container.findChild(VoiceMessageWidget)
+                            if voice_widget:
+                                voice_widget.set_playing(True)
     
     def _on_history_message_updated(self, message_id: str, new_content: str):
         """处理历史记录管理器发出的消息更新信号"""
@@ -804,10 +754,11 @@ class CompactChatWindow(QWidget):
         # 清空所有显示的消息
         while self._history_layout.count() > 1:  # 保留 stretch
             item = self._history_layout.itemAt(0)
-            if item and item.widget():
+            if item:
                 w = item.widget()
-                self._history_layout.removeWidget(w)
-                w.deleteLater()
+                if w is not None:
+                    self._history_layout.removeWidget(w)
+                    w.deleteLater()
         
         self._displayed_message_ids.clear()
         self._message_labels.clear()
@@ -822,8 +773,9 @@ class CompactChatWindow(QWidget):
             item = self._history_layout.itemAt(0)
             if item and item.widget():
                 w = item.widget()
-                self._history_layout.removeWidget(w)
-                w.deleteLater()
+                if w is not None:
+                    self._history_layout.removeWidget(w)
+                    w.deleteLater()
         
         self._displayed_message_ids.clear()
         self._message_labels.clear()
@@ -860,41 +812,31 @@ class CompactChatWindow(QWidget):
             return
             
         if self._attachment_path:
-            # 添加图片消息到历史记录
-            msg = self._chat_history.add_message(
+            # 添加图片消息到历史记录 - 信号会处理显示，无需手动显示
+            self._chat_history.add_message(
                 role="user",
                 content=text or "[图片]",
                 msg_type="image",
                 file_path=self._attachment_path
             )
-            # 显示消息
-            if msg.id not in self._displayed_message_ids:
-                self._displayed_message_ids.add(msg.id)
-                self._display_user_image(self._attachment_path)
-                if text:
-                    # 如果有文字，也添加文字消息
-                    text_msg = self._chat_history.add_message(
-                        role="user",
-                        content=text,
-                        msg_type="text"
-                    )
-                    if text_msg.id not in self._displayed_message_ids:
-                        self._displayed_message_ids.add(text_msg.id)
-                        self._display_user_text(text)
+            
+            if text:
+                # 如果有文字，也添加文字消息
+                self._chat_history.add_message(
+                    role="user",
+                    content=text,
+                    msg_type="text"
+                )
             
             self.image_sent.emit(self._attachment_path, text)
             self.clear_attachment()
         else:
-            # 添加文本消息到历史记录
-            msg = self._chat_history.add_message(
+            # 添加文本消息到历史记录 - 信号会处理显示
+            self._chat_history.add_message(
                 role="user",
                 content=text,
                 msg_type="text"
             )
-            # 显示消息
-            if msg.id not in self._displayed_message_ids:
-                self._displayed_message_ids.add(msg.id)
-                self._display_user_text(text)
             
             self.message_sent.emit(text)
             
@@ -1065,7 +1007,7 @@ class CompactChatWindow(QWidget):
             is_user: 是否是用户消息
         """
         container = QWidget()
-        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -1103,9 +1045,9 @@ class CompactChatWindow(QWidget):
     def _add_to_history(self, widget: QWidget, is_image: bool = False):
         # 设置widget的大小策略（图片消息保持 Fixed 高度）
         if not is_image:
-            widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         # 如果是图片消息，保留其 Fixed 高度策略
-        widget.setMaximumWidth(340)  # 限制最大宽度，避免横向滚动条
+        # widget.setMaximumWidth(340)  # 限制最大宽度，避免横向滚动条
         
         # 插入到 stretch 之前
         count = self._history_layout.count()
@@ -1114,38 +1056,22 @@ class CompactChatWindow(QWidget):
         # 限制历史数量
         while self._history_layout.count() > self._max_history + 1: # +1 for stretch
             item = self._history_layout.itemAt(0)
-            if item and item.widget():
+            if item:
                 w = item.widget()
-                self._history_layout.removeWidget(w)
-                w.deleteLater()
+                if w:
+                    self._history_layout.removeWidget(w)
+                    w.deleteLater()
         
         # 延迟更新布局，确保widget已完成布局
         QTimer.singleShot(10, self._update_geometry)
         QTimer.singleShot(50, self._scroll_to_bottom)
     
     def _update_geometry(self):
-        """根据内容自适应调整窗口高度"""
-        # 强制历史widget重新计算大小
-        self._history_widget.adjustSize()
-        
-        # 计算内容高度
-        content_height = self._history_widget.sizeHint().height()
-        
-        # 基础高度（标题栏约40 + 输入框约60 + 边距约20）
-        base_height = 120
-        if self._preview_frame.isVisible():
-            base_height += 50
-            
-        target_height = content_height + base_height
-        
-        # 限制高度范围
-        min_height = 200
-        max_height = 500
-        
-        final_height = max(min(target_height, max_height), min_height)
-        
-        # 使用固定宽度
-        self.setFixedSize(360, final_height)
+        """根据内容自适应调整窗口高度（仅在未手动调整大小时）"""
+        # 如果用户已经在调整大小，或者是初始显示，我们可能不需要强制调整
+        # 这里改为：如果内容很少，适应内容高度；如果内容很多，保持当前高度或最大高度
+        pass
+        # 移除强制 setFixedSize，允许用户调整
 
     def _scroll_to_bottom(self):
         scrollbar = self._scroll_area.verticalScrollBar()
@@ -1179,6 +1105,94 @@ class CompactChatWindow(QWidget):
                 self._current_ai_label.set_markdown(content)
         
         self._scroll_to_bottom()
+        
+    def _on_attach_clicked(self):
+        """点击附件按钮"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择图片",
+            "",
+            "图片文件 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)"
+        )
+        if file_path:
+            self.set_attachment(file_path)
+
+    # === 窗口调整大小逻辑 ===
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._resize_edge = self._check_edge(event.pos())
+            if self._resize_edge:
+                self._resizing = True
+                self._last_pos = event.globalPosition().toPoint()
+                event.accept()
+            else:
+                super().mousePressEvent(event)
+        else:
+            super().mousePressEvent(event)
+            
+    def mouseMoveEvent(self, event):
+        if self._resizing:
+            delta = event.globalPosition().toPoint() - self._last_pos
+            self._last_pos = event.globalPosition().toPoint()
+            
+            geo = self.geometry()
+            new_geo = geo
+            
+            if self._resize_edge:
+                if 'left' in self._resize_edge:
+                    new_geo.setLeft(geo.left() + delta.x())
+                if 'right' in self._resize_edge:
+                    new_geo.setRight(geo.right() + delta.x())
+                if 'top' in self._resize_edge:
+                    new_geo.setTop(geo.top() + delta.y())
+                if 'bottom' in self._resize_edge:
+                    new_geo.setBottom(geo.bottom() + delta.y())
+                
+            # 检查最小尺寸
+            if new_geo.width() >= self.minimumWidth() and new_geo.height() >= self.minimumHeight():
+                self.setGeometry(new_geo)
+                
+            event.accept()
+        else:
+            edge = self._check_edge(event.pos())
+            if edge:
+                if edge in ['left', 'right']:
+                    self.setCursor(Qt.CursorShape.SizeHorCursor)
+                elif edge in ['top', 'bottom']:
+                    self.setCursor(Qt.CursorShape.SizeVerCursor)
+                elif edge in ['top-left', 'bottom-right']:
+                    self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+                elif edge in ['top-right', 'bottom-left']:
+                    self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+            else:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+            super().mouseMoveEvent(event)
+            
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._resizing = False
+            self._resize_edge = None
+        super().mouseReleaseEvent(event)
+        
+    def _check_edge(self, pos):
+        """检查鼠标是否在边缘"""
+        x = pos.x()
+        y = pos.y()
+        w = self.width()
+        h = self.height()
+        m = self._resize_margin
+        
+        edge = ''
+        if y < m: edge += 'top'
+        elif y > h - m: edge += 'bottom'
+        
+        if x < m:
+            edge += ('-' if edge else '') + 'left'
+        elif x > w - m:
+            edge += ('-' if edge else '') + 'right'
+            
+        return edge if edge else None
             
     def finish_response(self):
         """响应结束"""
@@ -1256,7 +1270,7 @@ class FloatingBallWindow(QWidget):
         # 缩放动画
         self._scale_animation = QPropertyAnimation(self, b"scale_factor_prop", self)
         self._scale_animation.setDuration(150)
-        self._scale_animation.setEasingCurve(QEasingCurve.OutBack)
+        self._scale_animation.setEasingCurve(QEasingCurve.Type.OutBack)
         
         # 拖拽状态
         self._dragging = False
@@ -1282,7 +1296,7 @@ class FloatingBallWindow(QWidget):
                  self._load_avatar(appearance['avatar_path'])
         
         # 精简版对话窗口
-        self._compact_window = CompactChatWindow()
+        self._compact_window = CompactChatWindow(config=self.config)
         self._compact_window.message_sent.connect(self.message_sent)
         self._compact_window.image_sent.connect(self.image_sent)
         
@@ -1301,13 +1315,13 @@ class FloatingBallWindow(QWidget):
             # 加载Bot头像
             bot_avatar = ""
             if hasattr(appearance, 'bot_avatar_path'):
-                bot_avatar = appearance.bot_avatar_path or ""
+                bot_avatar = getattr(appearance, 'bot_avatar_path', "") or ""
             elif isinstance(appearance, dict) and 'bot_avatar_path' in appearance:
                 bot_avatar = appearance.get('bot_avatar_path', '') or ""
             # 如果没有bot_avatar_path，尝试使用旧的avatar_path
             if not bot_avatar:
                 if hasattr(appearance, 'avatar_path'):
-                    bot_avatar = appearance.avatar_path or ""
+                    bot_avatar = getattr(appearance, 'avatar_path', "") or ""
                 elif isinstance(appearance, dict) and 'avatar_path' in appearance:
                     bot_avatar = appearance.get('avatar_path', '') or ""
             if bot_avatar:
@@ -1383,6 +1397,10 @@ class FloatingBallWindow(QWidget):
     def set_bot_avatar(self, avatar_path: str):
         """设置Bot头像（传递给精简窗口）"""
         self._compact_window.set_bot_avatar(avatar_path)
+
+    def add_user_message(self, text: str, image_path: Optional[str] = None):
+        """添加用户消息（传递给精简窗口）"""
+        self._compact_window.add_user_message(text, image_path)
         
     def _update_breathing(self):
         """更新呼吸灯效果"""
@@ -1456,10 +1474,10 @@ class FloatingBallWindow(QWidget):
             painter.setBrush(QBrush(glow))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(
-                center_x - radius - i,
-                center_y - radius - i,
-                (radius + i) * 2,
-                (radius + i) * 2
+                int(center_x - radius - i),
+                int(center_y - radius - i),
+                int((radius + i) * 2),
+                int((radius + i) * 2)
             )
         
         # 2. 绘制主圆形背景（带渐变）
@@ -1476,10 +1494,10 @@ class FloatingBallWindow(QWidget):
         painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(
-            center_x - radius,
-            center_y - radius,
-            radius * 2,
-            radius * 2
+            int(center_x - radius),
+            int(center_y - radius),
+            int(radius * 2),
+            int(radius * 2)
         )
         
         # 3. 绘制内部高光
@@ -1489,10 +1507,10 @@ class FloatingBallWindow(QWidget):
         
         painter.setBrush(QBrush(highlight))
         painter.drawEllipse(
-            center_x - radius,
-            center_y - radius,
-            radius * 2,
-            radius * 2
+            int(center_x - radius),
+            int(center_y - radius),
+            int(radius * 2),
+            int(radius * 2)
         )
         
         # 4. 绘制头像或图标
@@ -1500,10 +1518,10 @@ class FloatingBallWindow(QWidget):
             # 创建圆形裁剪路径
             path = QPainterPath()
             path.addEllipse(
-                center_x - radius + 4,
-                center_y - radius + 4,
-                (radius - 4) * 2,
-                (radius - 4) * 2
+                float(center_x - radius + 4),
+                float(center_y - radius + 4),
+                float((radius - 4) * 2),
+                float((radius - 4) * 2)
             )
             painter.setClipPath(path)
             
@@ -1522,10 +1540,10 @@ class FloatingBallWindow(QWidget):
             if self._state == FloatingBallState.DISCONNECTED:
                 painter.setBrush(QColor(0, 0, 0, 100))
                 painter.drawEllipse(
-                    center_x - radius + 4,
-                    center_y - radius + 4,
-                    (radius - 4) * 2,
-                    (radius - 4) * 2
+                    int(center_x - radius + 4),
+                    int(center_y - radius + 4),
+                    int((radius - 4) * 2),
+                    int((radius - 4) * 2)
                 )
         else:
             # 绘制默认图标
@@ -1595,10 +1613,10 @@ class FloatingBallWindow(QWidget):
             painter.setPen(border_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(
-                center_x - radius + 1,
-                center_y - radius + 1,
-                (radius - 1) * 2,
-                (radius - 1) * 2
+                int(center_x - radius + 1),
+                int(center_y - radius + 1),
+                int((radius - 1) * 2),
+                int((radius - 1) * 2)
             )
     
     def enterEvent(self, event):
@@ -1724,11 +1742,6 @@ class FloatingBallWindow(QWidget):
             }}
         """)
         
-        open_action = menu.addAction("💬 打开对话")
-        open_action.triggered.connect(self.double_clicked.emit)
-        
-        menu.addSeparator()
-
         # 截图功能
         region_screenshot_action = menu.addAction("✂️ 区域截图")
         region_screenshot_action.triggered.connect(self._on_region_screenshot)

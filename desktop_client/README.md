@@ -191,7 +191,6 @@ desktop_client/
 ├── requirements.txt     # 依赖列表
 ├── gui/                 # GUI 组件
 │   ├── floating_ball.py # 悬浮球
-│   ├── simple_chat_window.py # 对话窗口
 │   ├── settings_window.py # 设置窗口
 │   ├── system_tray.py   # 系统托盘
 │   ├── screenshot_selector.py # 截图选择器
