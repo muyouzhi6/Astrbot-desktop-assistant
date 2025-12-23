@@ -1,0 +1,34 @@
+# AstrBot Desktop Client 依赖
+
+# GUI 框架
+PySide6>=6.5.0
+qasync>=0.27.1
+
+# HTTP 客户端
+httpx>=0.24.0
+httpx-sse>=0.4.0
+
+# WebSocket 客户端
+websockets>=11.0.0
+
+# 屏幕截图
+Pillow>=9.0.0
+mss>=9.0.0
+
+# 系统信息（用于桌面监控）
+psutil>=5.9.0
+
+# Windows 专用（可选，用于获取窗口信息）
+# pywin32>=306  # Windows only, uncomment if needed
+
+# 全局快捷键（可选，用于全局热键支持）
+pynput>=1.7.0
+
+# 配置管理
+pydantic>=2.0.0
+
+# 工具
+python-dateutil>=2.8.0
+
+# Markdown 渲染 & 代码高亮
+markdown>=3.4.0
