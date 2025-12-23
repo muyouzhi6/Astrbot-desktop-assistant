@@ -2,16 +2,15 @@
 客户端桌面监控服务
 
 负责收集本地桌面状态（活动窗口、截图等）并通过 WebSocket 上报给服务端。
+使用平台适配器实现跨平台功能。
 """
 
 import asyncio
 import base64
-import platform
-import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from io import BytesIO
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional
 
 # 可选依赖
 try:
@@ -20,37 +19,8 @@ try:
 except ImportError:
     HAS_PIL = False
 
-# Windows 专用
-if platform.system() == "Windows":
-    try:
-        import win32gui
-        import win32process
-        import psutil
-        HAS_WIN32 = True
-    except ImportError:
-        HAS_WIN32 = False
-else:
-    HAS_WIN32 = False
-
-# macOS 专用
-if platform.system() == "Darwin":
-    try:
-        from AppKit import NSWorkspace
-        HAS_APPKIT = True
-    except ImportError:
-        HAS_APPKIT = False
-else:
-    HAS_APPKIT = False
-
-# Linux 专用
-if platform.system() == "Linux":
-    try:
-        import subprocess
-        HAS_XDOTOOL = True
-    except ImportError:
-        HAS_XDOTOOL = False
-else:
-    HAS_XDOTOOL = False
+# 导入平台适配器
+from ..platforms import get_platform_adapter, IPlatformAdapter
 
 
 @dataclass
@@ -71,7 +41,7 @@ class DesktopState:
     # 截图高度
     screenshot_height: Optional[int] = None
     # 运行中的应用列表
-    running_apps: Optional[list] = None
+    running_apps: Optional[List[dict]] = None
     # 窗口是否发生变化
     window_changed: bool = False
     # 上一个窗口标题
@@ -117,6 +87,9 @@ class DesktopMonitorService:
         self._last_window_title: Optional[str] = None
         self._last_state: Optional[DesktopState] = None
         
+        # 获取平台适配器
+        self._platform: IPlatformAdapter = get_platform_adapter()
+        
     @property
     def is_monitoring(self) -> bool:
         """是否正在监控"""
@@ -134,7 +107,7 @@ class DesktopMonitorService:
             
         self._is_monitoring = True
         self._monitor_task = asyncio.create_task(self._monitor_loop())
-        print("桌面监控服务已启动")
+        print(f"桌面监控服务已启动 (平台: {self._platform.platform_name})")
         
     async def stop(self):
         """停止监控"""
@@ -183,11 +156,11 @@ class DesktopMonitorService:
             DesktopState 对象
         """
         try:
-            # 获取活动窗口信息
-            window_info = self._get_active_window_info()
+            # 使用平台适配器获取活动窗口信息
+            window_info = self._platform.get_active_window()
             
             # 检测窗口变化
-            current_title = window_info.get("title")
+            current_title = window_info.title
             window_changed = current_title != self._last_window_title
             previous_title = self._last_window_title if window_changed else None
             self._last_window_title = current_title
@@ -195,15 +168,16 @@ class DesktopMonitorService:
             # 创建状态对象
             state = DesktopState(
                 timestamp=datetime.now().isoformat(),
-                active_window_title=window_info.get("title"),
-                active_window_process=window_info.get("process"),
-                active_window_pid=window_info.get("pid"),
+                active_window_title=window_info.title,
+                active_window_process=window_info.process,
+                active_window_pid=window_info.pid,
                 window_changed=window_changed,
                 previous_window_title=previous_title,
             )
             
-            # 获取运行中的应用列表
-            state.running_apps = self._get_running_apps()
+            # 使用平台适配器获取运行中的应用列表
+            apps = self._platform.get_running_apps()
+            state.running_apps = [app.to_dict() for app in apps]
             
             # 捕获截图
             if include_screenshot and self.screenshot_enabled and self.screen_capture:
@@ -219,140 +193,6 @@ class DesktopMonitorService:
         except Exception as e:
             print(f"捕获桌面状态失败: {e}")
             return None
-            
-    def _get_active_window_info(self) -> dict[str, Any]:
-        """获取当前活动窗口信息"""
-        info: dict[str, Any] = {
-            "title": None,
-            "process": None,
-            "pid": None,
-        }
-        
-        system = platform.system()
-        
-        try:
-            if system == "Windows" and HAS_WIN32:
-                info = self._get_active_window_windows()
-            elif system == "Darwin" and HAS_APPKIT:
-                info = self._get_active_window_macos()
-            elif system == "Linux":
-                info = self._get_active_window_linux()
-        except Exception as e:
-            print(f"获取活动窗口信息失败: {e}")
-            
-        return info
-        
-    def _get_active_window_windows(self) -> dict[str, Any]:
-        """Windows: 获取活动窗口信息"""
-        info: dict[str, Any] = {"title": None, "process": None, "pid": None}
-        
-        try:
-            hwnd = win32gui.GetForegroundWindow()
-            if hwnd:
-                info["title"] = win32gui.GetWindowText(hwnd)
-                
-                # 获取进程 ID
-                _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                info["pid"] = pid
-                
-                # 获取进程名
-                try:
-                    process = psutil.Process(pid)
-                    info["process"] = process.name()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-        except Exception as e:
-            print(f"Windows 获取窗口信息失败: {e}")
-            
-        return info
-        
-    def _get_active_window_macos(self) -> dict[str, Any]:
-        """macOS: 获取活动窗口信息"""
-        info: dict[str, Any] = {"title": None, "process": None, "pid": None}
-        
-        try:
-            workspace = NSWorkspace.sharedWorkspace()
-            active_app = workspace.frontmostApplication()
-            
-            if active_app:
-                info["process"] = active_app.localizedName()
-                info["pid"] = active_app.processIdentifier()
-                # macOS 获取窗口标题需要额外的 Accessibility API
-                info["title"] = info["process"]  # 简化处理
-        except Exception as e:
-            print(f"macOS 获取窗口信息失败: {e}")
-            
-        return info
-        
-    def _get_active_window_linux(self) -> dict[str, Any]:
-        """Linux: 获取活动窗口信息"""
-        info: dict[str, Any] = {"title": None, "process": None, "pid": None}
-        
-        try:
-            # 使用 xdotool 获取活动窗口
-            result = subprocess.run(
-                ["xdotool", "getactivewindow", "getwindowname"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                info["title"] = result.stdout.strip()
-                
-            # 获取窗口 PID
-            result = subprocess.run(
-                ["xdotool", "getactivewindow", "getwindowpid"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                pid = int(result.stdout.strip())
-                info["pid"] = pid
-                
-                # 获取进程名
-                try:
-                    process = psutil.Process(pid)
-                    info["process"] = process.name()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-        except FileNotFoundError:
-            print("xdotool 未安装，无法获取窗口信息")
-        except Exception as e:
-            print(f"Linux 获取窗口信息失败: {e}")
-            
-        return info
-        
-    def _get_running_apps(self) -> list:
-        """获取运行中的应用列表"""
-        apps = []
-        
-        try:
-            for proc in psutil.process_iter(['pid', 'name']):
-                try:
-                    pinfo = proc.info
-                    # 过滤系统进程
-                    if pinfo['name'] and not pinfo['name'].startswith('_'):
-                        apps.append({
-                            "pid": pinfo['pid'],
-                            "name": pinfo['name'],
-                        })
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except Exception as e:
-            print(f"获取运行应用列表失败: {e}")
-            
-        # 去重并限制数量
-        seen = set()
-        unique_apps = []
-        for app in apps:
-            if app['name'] not in seen:
-                seen.add(app['name'])
-                unique_apps.append(app)
-                if len(unique_apps) >= 50:  # 限制最多50个
-                    break
-                    
-        return unique_apps
         
     async def _capture_screenshot(self) -> Optional[dict]:
         """捕获并压缩截图"""
@@ -383,7 +223,7 @@ class DesktopMonitorService:
             print(f"截图失败: {e}")
             return None
             
-    def _resize_image(self, image: Image.Image, max_width: int, max_height: int) -> Image.Image:
+    def _resize_image(self, image: "Image.Image", max_width: int, max_height: int) -> "Image.Image":
         """调整图片大小"""
         # 计算缩放比例
         ratio = min(max_width / image.width, max_height / image.height)
