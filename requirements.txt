@@ -5,8 +5,11 @@ PySide6>=6.5.0
 qasync>=0.27.1
 
 # HTTP 客户端
-httpx>=0.24.0
+httpx[http2]>=0.24.0
 httpx-sse>=0.4.0
+
+# WebSocket 客户端
+websockets>=11.0.0
 
 # 屏幕截图
 Pillow>=9.0.0
@@ -24,6 +27,10 @@ python-dateutil>=2.8.0
 # Markdown 渲染 & 代码高亮
 markdown>=3.4.0
 pygments>=2.15.0
+
+# macOS 平台专用依赖（用于窗口置顶等原生功能）
+pyobjc-framework-Cocoa>=9.0; sys_platform == "darwin"
+
 # 测试框架
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
