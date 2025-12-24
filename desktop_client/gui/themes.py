@@ -315,6 +315,59 @@ THEME_OCEAN = Theme(
     ),
 )
 
+THEME_MACOS_LIGHT = Theme(
+    name="macos_light",
+    display_name="macOS 风格（浅色）",
+    type=ThemeType.LIGHT,
+    colors=ThemeColors(
+        primary="#007AFF",           # macOS 系统蓝
+        primary_light="#3395FF",
+        primary_dark="#0051D5",
+
+        success="#34C759",           # macOS 绿色
+        warning="#FF9500",           # macOS 橙色
+        danger="#FF3B30",            # macOS 红色
+
+        bg_primary="#FFFFFF",
+        bg_secondary="#F5F5F7",      # macOS 浅灰
+        bg_tertiary="#E8E8ED",
+        bg_hover="#E5E5EA",
+
+        text_primary="#1D1D1F",      # macOS 主文字色
+        text_regular="#1D1D1F",
+        text_secondary="#6E6E73",
+        text_placeholder="#A1A1A6",
+        text_inverse="#FFFFFF",
+
+        border_base="#D1D1D6",
+        border_light="#D1D1D6",
+        border_lighter="#E5E5EA",
+        border_extra_light="#F5F5F7",
+
+        shadow_base="rgba(0, 0, 0, 0.08)",
+        shadow_light="rgba(0, 0, 0, 0.05)",
+
+        ball_bg="#007AFF",
+        ball_glow="rgba(0, 122, 255, 0.4)",
+        ball_border="#0051D5",
+
+        bubble_user_bg="#007AFF",
+        bubble_user_text="#FFFFFF",
+        bubble_ai_bg="#FFFFFF",
+        bubble_ai_text="#1D1D1F",
+        bubble_ai_border="#E5E5EA",
+
+        system_notice_text="#6E6E73",
+    ),
+    border_radius=10,
+    border_radius_small=6,
+    border_radius_large=14,
+    font_family='-apple-system, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif',
+    font_size_base=13,
+    font_size_small=11,
+    font_size_large=15,
+)
+
 
 # 所有预设主题
 PRESET_THEMES: Dict[str, Theme] = {
@@ -327,6 +380,7 @@ PRESET_THEMES: Dict[str, Theme] = {
     "dark_green": THEME_DARK_GREEN,
     "sakura": THEME_SAKURA,
     "ocean": THEME_OCEAN,
+    "macos_light": THEME_MACOS_LIGHT,  # macOS 风格
 }
 
 
@@ -346,6 +400,10 @@ class ThemeManager:
             cls._instance._callbacks = []
             cls._instance._custom_config = None
             cls._instance._effective_colors = None
+            # QSS 支持
+            cls._instance._qss_enabled = False
+            cls._instance._qss_loader = None
+            cls._instance._global_qss = ""
         return cls._instance
     
     @property
@@ -418,6 +476,15 @@ class ThemeManager:
             self._current_theme = PRESET_THEMES[theme_name]
             # 主题切换后重新计算生效的颜色
             self._update_effective_colors()
+
+            # QSS 模式下重新加载并应用样式
+            if self._qss_enabled:
+                self._load_global_qss()
+                from PySide6.QtWidgets import QApplication
+                app = QApplication.instance()
+                if app:
+                    self.apply_global_stylesheet(app)
+
             self._notify_callbacks()
             return True
         return False
@@ -456,7 +523,101 @@ class ThemeManager:
                 callback(self._current_theme)
             except Exception as e:
                 print(f"Theme callback error: {e}")
-    
+
+    # ============ QSS 支持方法 ============
+
+    def enable_qss_mode(self, enabled: bool = True):
+        """启用/禁用 QSS 模式
+
+        Args:
+            enabled: True=使用 QSS, False=使用 Python 样式（默认）
+        """
+        self._qss_enabled = enabled
+        if enabled and self._qss_loader is None:
+            from .theme_qss.loader import QSSThemeLoader
+            self._qss_loader = QSSThemeLoader()
+            self._load_global_qss()
+
+    def is_qss_enabled(self) -> bool:
+        """检查是否启用了 QSS 模式"""
+        return self._qss_enabled
+
+    def _load_global_qss(self):
+        """加载全局 QSS 样式表"""
+        if not self._qss_enabled or self._qss_loader is None:
+            return
+
+        # 将当前主题颜色转换为 QSS 变量
+        color_vars = self._colors_to_qss_variables()
+
+        # 加载主题（base.qss + 主题特定.qss）
+        self._global_qss = self._qss_loader.load_theme(
+            self._current_theme.name,
+            color_vars
+        )
+
+    def _colors_to_qss_variables(self) -> dict:
+        """将当前主题颜色转换为 QSS 变量字典
+
+        Returns:
+            颜色变量字典，key 使用连字符命名（如 'primary-light'）
+        """
+        c = self.get_current_colors()
+        t = self._current_theme
+
+        return {
+            # 主色调
+            'primary': c.primary,
+            'primary-light': c.primary_light,
+            'primary-dark': c.primary_dark,
+            # 辅助色
+            'success': c.success,
+            'warning': c.warning,
+            'danger': c.danger,
+            'info': c.info,
+            # 背景色
+            'bg-primary': c.bg_primary,
+            'bg-secondary': c.bg_secondary,
+            'bg-tertiary': c.bg_tertiary,
+            'bg-hover': c.bg_hover,
+            # 文字色
+            'text-primary': c.text_primary,
+            'text-regular': c.text_regular,
+            'text-secondary': c.text_secondary,
+            'text-tertiary': c.text_secondary,  # 使用 text_secondary
+            'text-placeholder': c.text_placeholder,
+            'text-inverse': c.text_inverse,
+            # 边框色
+            'border-base': c.border_base,
+            'border-light': c.border_light,
+            'border-lighter': c.border_lighter,
+            'border-extra-light': c.border_extra_light,
+            # 阴影
+            'shadow-base': c.shadow_base,
+            'shadow-light': c.shadow_light,
+            'shadow-medium': c.shadow_base,  # 使用 shadow_base
+            # 圆角
+            'border-radius': f'{t.border_radius}px',
+            'border-radius-small': f'{t.border_radius_small}px',
+            'border-radius-large': f'{t.border_radius_large}px',
+        }
+
+    def apply_global_stylesheet(self, app):
+        """应用全局样式表到 QApplication
+
+        Args:
+            app: QApplication 实例
+        """
+        if self._qss_enabled and self._global_qss:
+            app.setStyleSheet(self._global_qss)
+            print(f"[INFO] 已应用 QSS 样式表：{len(self._global_qss)} 字符")
+        else:
+            print("[INFO] QSS 模式未启用，跳过全局样式应用")
+
+    def get_global_qss(self) -> str:
+        """获取当前全局 QSS 样式表内容（用于调试）"""
+        return self._global_qss
+
     # ============ 样式生成方法 ============
     
     def get_floating_ball_style(self) -> str:
@@ -523,21 +684,29 @@ class ThemeManager:
                 border: none;
             }}
             QScrollBar:vertical {{
-                background-color: {c.bg_tertiary};
-                width: 8px;
-                border-radius: 4px;
+                background-color: transparent;
+                width: 6px;
+                border-radius: 3px;
+                margin: 2px;
             }}
             QScrollBar::handle:vertical {{
-                background-color: {c.border_base};
-                border-radius: 4px;
+                background-color: rgba(0, 0, 0, 0.15);
+                border-radius: 3px;
                 min-height: 30px;
+                margin: 1px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background-color: {c.text_secondary};
+                background-color: rgba(0, 0, 0, 0.3);
             }}
-            QScrollBar::add-line:vertical, 
-            QScrollBar::sub-line:vertical {{
+            QScrollBar::handle:vertical:pressed {{
+                background-color: rgba(0, 0, 0, 0.4);
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical,
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{
                 height: 0px;
+                background: none;
             }}
         """
     

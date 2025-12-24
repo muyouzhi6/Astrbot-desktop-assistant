@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from .themes import theme_manager, Theme
+from .icons import icon_manager
 
 def format_file_size(size_bytes: int) -> str:
     """格式化文件大小"""
@@ -78,7 +79,7 @@ class VoiceMessageWidget(QFrame):
         layout.setSpacing(10)
         
         # 播放/暂停按钮
-        self._play_btn = QPushButton("▶")
+        self._play_btn = QPushButton()
         self._play_btn.setObjectName("voicePlayBtn")
         self._play_btn.setFixedSize(36, 36)
         self._play_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -188,13 +189,13 @@ class VoiceMessageWidget(QFrame):
         """播放状态变化"""
         if state == QMediaPlayer.PlaybackState.PlayingState:
             self._is_playing = True
-            self._play_btn.setText("⏸")
+            self._play_btn.setIcon(icon_manager.get_icon("pause", color="white", size=16))
         elif state == QMediaPlayer.PlaybackState.PausedState:
             self._is_playing = False
-            self._play_btn.setText("▶")
+            self._play_btn.setIcon(icon_manager.get_icon("play", color="white", size=16))
         elif state == QMediaPlayer.PlaybackState.StoppedState:
             self._is_playing = False
-            self._play_btn.setText("▶")
+            self._play_btn.setIcon(icon_manager.get_icon("play", color="white", size=16))
             # 播放完成后重置进度
             self._slider.setValue(0)
             self._update_time_display(0, self._player.duration())
@@ -294,14 +295,14 @@ class VideoMessageWidget(QFrame):
                                        Qt.TransformationMode.SmoothTransformation)
                 self._thumbnail_label.setPixmap(scaled)
         else:
-            self._thumbnail_label.setText("🎬")
-            self._thumbnail_label.setStyleSheet("font-size: 48px; background: #333;")
+            self._thumbnail_label.setText("视频")
+            self._thumbnail_label.setStyleSheet("font-size: 20px; background: #333; color: #999;")
             
         thumb_layout.addWidget(self._thumbnail_label)
         layout.addWidget(self._thumbnail_container)
         
         # 播放按钮覆盖层
-        self._play_overlay = QLabel("▶")
+        self._play_overlay = QLabel()
         self._play_overlay.setObjectName("videoPlayOverlay")
         self._play_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._play_overlay.setFixedSize(50, 50)
@@ -336,7 +337,7 @@ class VideoMessageWidget(QFrame):
                 background-color: rgba(0, 0, 0, 0.6);
                 color: white;
                 border-radius: 25px;
-                font-size: 24px;
+                font-size: 24px; /* Fallback */
             }}
             QLabel#videoDuration {{
                 background-color: rgba(0, 0, 0, 0.7);
@@ -380,25 +381,7 @@ class FileMessageWidget(QFrame):
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # 根据文件扩展名选择图标
-        ext = os.path.splitext(self._file_name)[1].lower()
-        if ext in ['.pdf']:
-            icon_text = "📄"
-        elif ext in ['.doc', '.docx']:
-            icon_text = "📝"
-        elif ext in ['.xls', '.xlsx']:
-            icon_text = "📊"
-        elif ext in ['.ppt', '.pptx']:
-            icon_text = "📽️"
-        elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz']:
-            icon_text = "🗜️"
-        elif ext in ['.txt', '.md', '.json', '.xml']:
-            icon_text = "📃"
-        elif ext in ['.py', '.js', '.ts', '.java', '.c', '.cpp', '.h']:
-            icon_text = "💻"
-        else:
-            icon_text = "📁"
-            
-        self._icon_label.setText(icon_text)
+        self._update_file_icon()
         layout.addWidget(self._icon_label)
         
         # 文件信息
@@ -421,7 +404,7 @@ class FileMessageWidget(QFrame):
         layout.addStretch()
         
         # 下载/打开按钮
-        self._action_btn = QPushButton("📥")
+        self._action_btn = QPushButton()
         self._action_btn.setObjectName("fileActionBtn")
         self._action_btn.setFixedSize(32, 32)
         self._action_btn.setToolTip("打开文件")
@@ -471,8 +454,27 @@ class FileMessageWidget(QFrame):
                 background-color: {c.primary_dark};
             }}
         """)
-        # 设置图标字体大小
-        self._icon_label.setStyleSheet("font-size: 28px; background: transparent;")
+        # 设置图标
+        c = theme_manager.get_current_colors()
+        self._action_btn.setIcon(icon_manager.get_icon("download", color="white"))
+        self._update_file_icon(c.text_secondary)
+
+    def _update_file_icon(self, color: str = "#000000"):
+        """根据文件类型更新图标"""
+        ext = os.path.splitext(self._file_name)[1].lower()
+        icon_name = "file"
+        if ext in ['.pdf', '.doc', '.docx', '.txt', '.md']:
+            icon_name = "file-text"
+        elif ext in ['.xls', '.xlsx', '.csv']:
+            icon_name = "bar-chart-2"
+        elif ext in ['.ppt', '.pptx']:
+            icon_name = "film"
+        elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz']:
+            icon_name = "file-archive"
+        elif ext in ['.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.html', '.css', '.json']:
+            icon_name = "file-code"
+        
+        self._icon_label.setPixmap(icon_manager.get_pixmap(icon_name, color=color, size=32))
         
     def _on_action_clicked(self):
         if os.path.exists(self._file_path):

@@ -255,10 +255,14 @@ class ClientConfig:
             path = cls.get_config_path()
         
         print(f"[DEBUG] 尝试加载配置文件: {path}")
-        
+
         if not path.exists():
-            print(f"[DEBUG] 配置文件不存在，使用默认配置")
-            return cls()
+            print(f"[DEBUG] 配置文件不存在，创建默认配置")
+            config = cls()
+            # 首次启动，自动保存默认配置
+            config.save(config_path)
+            print(f"[DEBUG] 默认配置已保存到: {path}")
+            return config
         
         try:
             with open(path, 'r', encoding='utf-8') as f:
