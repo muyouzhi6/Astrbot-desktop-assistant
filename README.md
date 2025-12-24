@@ -43,22 +43,25 @@ git clone https://github.com/muyouzhi6/astrbot_plugin_desktop_assistant.git data
 
 > 🚀 **一键脚本特点**：自动检测最快的 GitHub 加速代理、下载项目、安装依赖、配置开机自启、创建桌面快捷方式。
 
-**Windows 用户：**
+**Windows 用户（推荐）：**
 
-1. 下载一键部署脚本：[quick_install.bat](https://gh.llkk.cc/https://raw.githubusercontent.com/muyouzhi6/Astrbot-desktop-assistant/main/quick_install.bat)
-2. 双击运行，按提示操作即可
+打开 **PowerShell**（Win + X，选择 Windows Terminal 或 PowerShell），复制粘贴以下命令后回车：
 
-或使用 PowerShell 命令：
 ```powershell
-# 下载并运行一键部署脚本
-Invoke-WebRequest -Uri "https://gh.llkk.cc/https://raw.githubusercontent.com/muyouzhi6/Astrbot-desktop-assistant/main/quick_install.bat" -OutFile "quick_install.bat"; .\quick_install.bat
+irm "https://gh.llkk.cc/https://raw.githubusercontent.com/muyouzhi6/Astrbot-desktop-assistant/main/quick_install.bat" -OutFile "$env:TEMP\quick_install.bat"; Start-Process "$env:TEMP\quick_install.bat"
 ```
 
-**macOS / Linux 用户：**
+> 💡 **也可以手动下载**：<a href="https://gh.llkk.cc/https://raw.githubusercontent.com/muyouzhi6/Astrbot-desktop-assistant/main/quick_install.bat" download="quick_install.bat">点击下载 quick_install.bat</a>（右键另存为），然后双击运行。
+
+**macOS / Linux 用户（推荐）：**
+
+打开 **终端**，复制粘贴以下命令后回车：
+
 ```bash
-# 下载并运行一键部署脚本
-curl -fsSL https://gh.llkk.cc/https://raw.githubusercontent.com/muyouzhi6/Astrbot-desktop-assistant/main/quick_install.sh -o quick_install.sh && chmod +x quick_install.sh && ./quick_install.sh
+curl -fsSL https://gh.llkk.cc/https://raw.githubusercontent.com/muyouzhi6/Astrbot-desktop-assistant/main/quick_install.sh | bash
 ```
+
+> 💡 **也可以手动下载**：<a href="https://gh.llkk.cc/https://raw.githubusercontent.com/muyouzhi6/Astrbot-desktop-assistant/main/quick_install.sh" download="quick_install.sh">点击下载 quick_install.sh</a>（右键另存为），然后在终端运行 `chmod +x quick_install.sh && ./quick_install.sh`。
 
 > 💡 **GitHub 加速说明**：脚本会自动测试以下加速代理并选择最快的：
 > - `https://gh.llkk.cc`
