@@ -230,9 +230,14 @@ class WindowsPlatformAdapter(IPlatformAdapter):
         project_root_str = str(project_root).replace('\\', '\\\\')
         python_path_str = python_path.replace('\\', '\\\\')
         
+        # 获取配置目录路径（用于日志记录）
+        from ..config import ClientConfig
+        config_dir = ClientConfig.get_config_dir()
+        config_dir_str = str(config_dir).replace('\\', '\\\\')
+        
         # VBS 脚本内容
         # 添加 --autostart 参数，让应用知道这是开机自启，可以使用更长的启动延迟
-        # 添加错误处理和日志记录
+        # 添加详细的错误处理和日志记录
         vbs_content = f'''
 ' AstrBot Desktop Assistant 开机自启脚本
 ' 自动生成，请勿手动修改
@@ -242,38 +247,110 @@ On Error Resume Next
 Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
+' 配置目录（用于日志）
+configDir = "{config_dir_str}"
+
+' 创建日志函数
+Sub WriteLog(message)
+    On Error Resume Next
+    logPath = configDir & "\\autostart.log"
+    Set logFile = fso.OpenTextFile(logPath, 8, True)
+    logFile.WriteLine Now() & " - " & message
+    logFile.Close
+End Sub
+
+WriteLog "========== 开机自启脚本开始执行 =========="
+
 ' 设置工作目录
 projectRoot = "{project_root_str}"
 pythonPath = "{python_path_str}"
 
-' 检查目录是否存在
+WriteLog "配置的项目根目录: " & projectRoot
+WriteLog "配置的 Python 路径: " & pythonPath
+
+' 检查 Python 是否存在
+If Not fso.FileExists(pythonPath) Then
+    WriteLog "错误: Python 解释器不存在: " & pythonPath
+    ' 尝试查找 pythonw.exe
+    pythonDir = fso.GetParentFolderName(pythonPath)
+    altPython = pythonDir & "\\pythonw.exe"
+    If fso.FileExists(altPython) Then
+        pythonPath = altPython
+        WriteLog "使用替代 Python: " & pythonPath
+    Else
+        altPython = pythonDir & "\\python.exe"
+        If fso.FileExists(altPython) Then
+            pythonPath = altPython
+            WriteLog "使用替代 Python: " & pythonPath
+        Else
+            WriteLog "错误: 无法找到任何 Python 解释器"
+            WScript.Quit 1
+        End If
+    End If
+End If
+
+' 检查项目目录是否存在
 If Not fso.FolderExists(projectRoot) Then
-    ' 尝试使用脚本所在目录
+    WriteLog "警告: 项目根目录不存在: " & projectRoot
+    
+    ' 尝试使用脚本所在目录推断
     scriptPath = WScript.ScriptFullName
     scriptDir = fso.GetParentFolderName(scriptPath)
+    WriteLog "脚本所在目录: " & scriptDir
+    
     ' 配置目录的父目录可能是项目根目录
     parentDir = fso.GetParentFolderName(scriptDir)
     If fso.FolderExists(parentDir & "\\desktop_client") Then
         projectRoot = parentDir
+        WriteLog "使用推断的项目根目录: " & projectRoot
+    Else
+        ' 尝试从 Python 路径推断（虚拟环境场景）
+        pythonDir = fso.GetParentFolderName(pythonPath)
+        ' 虚拟环境通常在项目目录下的 .venv 或 venv 目录
+        venvParent = fso.GetParentFolderName(pythonDir)
+        If fso.FolderExists(venvParent & "\\desktop_client") Then
+            projectRoot = venvParent
+            WriteLog "从虚拟环境推断项目根目录: " & projectRoot
+        End If
     End If
 End If
 
+' 再次检查项目目录
+If Not fso.FolderExists(projectRoot) Then
+    WriteLog "错误: 无法确定项目根目录，退出"
+    WScript.Quit 1
+End If
+
+' 检查 desktop_client 模块是否存在
+If Not fso.FolderExists(projectRoot & "\\desktop_client") Then
+    WriteLog "错误: desktop_client 模块不存在于: " & projectRoot
+    WScript.Quit 1
+End If
+
+WriteLog "最终项目根目录: " & projectRoot
+
 ' 切换到项目目录
 WshShell.CurrentDirectory = projectRoot
+WriteLog "已切换工作目录"
 
 ' 延迟启动（等待网络和其他服务就绪）
-WScript.Sleep 5000
+WriteLog "等待 8 秒让系统完全启动..."
+WScript.Sleep 8000
+
+' 构建启动命令
+cmd = """" & pythonPath & """ -m desktop_client --autostart"
+WriteLog "执行命令: " & cmd
 
 ' 启动应用程序
-cmd = """" & pythonPath & """ -m desktop_client --autostart"
-WshShell.Run cmd, 0, False
+returnCode = WshShell.Run(cmd, 0, False)
 
 If Err.Number <> 0 Then
-    ' 记录错误日志
-    Set logFile = fso.OpenTextFile(scriptDir & "\\autostart_error.log", 8, True)
-    logFile.WriteLine Now() & " - 启动失败: " & Err.Description
-    logFile.Close
+    WriteLog "启动失败: " & Err.Description & " (错误代码: " & Err.Number & ")"
+Else
+    WriteLog "应用程序启动成功"
 End If
+
+WriteLog "========== 开机自启脚本执行完毕 =========="
 '''
         
         # 保存到用户配置目录

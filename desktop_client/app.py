@@ -29,7 +29,7 @@ from .config import ClientConfig, load_config, save_config
 from .bridge import MessageBridge, InputMessage
 from .services.proactive_dialog import ProactiveDialogService
 from .services import get_chat_history_manager
-from .handlers import MessageHandler, ScreenshotHandler, ProactiveHandler, MediaHandler
+from .handlers import MessageHandler, ScreenshotHandler, ProactiveHandler, MediaHandler, RemoteCommandHandler
 from .controllers import SettingsController
 
 
@@ -116,6 +116,12 @@ class DesktopClientApp(QObject):
             config=self.config,
             bridge=self._bridge,
             message_handler=self._message_handler,
+            parent=self
+        )
+        
+        # 远程命令处理器
+        self._remote_command_handler = RemoteCommandHandler(
+            config=self.config,
             parent=self
         )
         
@@ -252,6 +258,9 @@ class DesktopClientApp(QObject):
                 if not self._proactive_service.is_running:
                     self._proactive_service.start()
                     print("[DEBUG] 主动对话服务已启动")
+            
+            # 启动 WebSocket 连接（用于接收远程命令）
+            await self._start_websocket_connection()
         else:
             print(f"[DEBUG] 连接失败: {msg}")
             if self._floating_ball:
@@ -262,6 +271,49 @@ class DesktopClientApp(QObject):
                 print("[DEBUG] 主动对话服务已停止（连接失败）")
             
             self._schedule_reconnect()
+    
+    async def _start_websocket_connection(self):
+        """启动 WebSocket 连接（用于接收服务端下发的命令）"""
+        if not self.config.session_id:
+            print("[DEBUG] 未设置 session_id，跳过 WebSocket 连接")
+            return
+        
+        try:
+            # 定义远程命令处理回调
+            async def on_remote_command(command: str, request_id: str, params: dict):
+                """处理远程命令并返回结果"""
+                return await self._remote_command_handler.handle_command(
+                    command, request_id, params
+                )
+            
+            # 启动 WebSocket 客户端，同时传入消息和命令处理回调
+            # 注意：使用配置中的 ws_port 连接独立的 WebSocket 服务器（默认端口 6190）
+            await self._bridge.api_client.start_websocket(
+                session_id=self.config.session_id,
+                on_message=self._on_websocket_message,
+                on_command=on_remote_command,
+                ws_port=self.config.server.ws_port
+            )
+            
+            print("[DEBUG] WebSocket 连接已建立，可接收远程命令")
+            
+        except Exception as e:
+            print(f"[WARNING] 启动 WebSocket 连接失败: {e}")
+    
+    def _on_websocket_message(self, data: dict):
+        """处理 WebSocket 消息"""
+        msg_type = data.get("type")
+        
+        if msg_type == "message":
+            # 处理服务端推送的消息
+            content = data.get("content", "")
+            if content and self._floating_ball:
+                self._floating_ball.show_bubble(content)
+        elif msg_type == "notification":
+            # 处理通知消息
+            content = data.get("content", "")
+            if content and self._floating_ball:
+                self._floating_ball.show_system_message(content)
     
     def _on_connection_state_changed(self, state):
         """处理连接状态变化"""
@@ -349,6 +401,7 @@ class DesktopClientApp(QObject):
         self._screenshot_handler.set_floating_ball(self._floating_ball)
         self._proactive_handler.set_floating_ball(self._floating_ball)
         self._settings_controller.set_floating_ball(self._floating_ball)
+        self._remote_command_handler.set_floating_ball(self._floating_ball)
         
         # 创建系统托盘
         print("[DEBUG] 创建系统托盘...")

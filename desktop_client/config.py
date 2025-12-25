@@ -33,6 +33,8 @@ class ServerConfig:
     request_timeout: int = 30  # 秒
     # 是否启用流式输出
     enable_streaming: bool = True
+    # WebSocket 服务端口（独立 WS 服务器，用于接收远程命令）
+    ws_port: int = 6190
     
 
 @dataclass

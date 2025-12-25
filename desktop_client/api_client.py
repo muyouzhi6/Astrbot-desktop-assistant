@@ -55,13 +55,25 @@ class WebSocketClient:
         server_url: str,
         token: str,
         session_id: str,
-        on_message: Optional[Callable[[dict], None]] = None
+        on_message: Optional[Callable[[dict], None]] = None,
+        on_command: Optional[Callable[[str, str, dict], Any]] = None,
+        ws_port: Optional[int] = None
     ):
-        # 转换 http/https 为 ws/wss
-        ws_url = server_url.replace("http://", "ws://").replace("https://", "wss://")
-        self.url = f"{ws_url}/ws/client?token={token}&session_id={session_id}"
+        # 解析服务器 URL，提取 host
+        from urllib.parse import urlparse
+        parsed = urlparse(server_url)
+        host = parsed.hostname or "localhost"
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        
+        # 使用独立的 WebSocket 端口（默认 6190）
+        port = ws_port or 6190
+        
+        # 构建 WebSocket URL（连接到独立 WS 服务器）
+        self.url = f"{scheme}://{host}:{port}/ws/client?token={token}&session_id={session_id}"
+        self.session_id = session_id
         
         self.on_message = on_message
+        self.on_command = on_command  # 命令处理回调: (command, request_id, params) -> result
         self.ws = None
         
         self._running = False
@@ -126,6 +138,11 @@ class WebSocketClient:
                             # 处理心跳响应
                             if data.get("type") == "heartbeat_ack":
                                 continue
+                            
+                            # 处理服务端下发的命令
+                            if data.get("type") == "command":
+                                await self._handle_command(data)
+                                continue
                                 
                             if self.on_message:
                                 # 在主线程/事件循环中调用回调
@@ -162,6 +179,70 @@ class WebSocketClient:
                 await asyncio.sleep(30)
             except Exception:
                 break
+    
+    async def _handle_command(self, data: dict):
+        """
+        处理服务端下发的命令
+        
+        命令格式：
+        {
+            "type": "command",
+            "command": "screenshot",
+            "request_id": "xxx",
+            "params": {...}
+        }
+        """
+        command: str = data.get("command", "")
+        request_id: str = data.get("request_id", "")
+        params: dict = data.get("params", {})
+        
+        if not command:
+            print("[WebSocket] 收到无效命令: 缺少 command 字段")
+            return
+        
+        print(f"[WebSocket] 收到命令: {command}, request_id={request_id}")
+        
+        if self.on_command:
+            try:
+                # 调用命令处理回调
+                if asyncio.iscoroutinefunction(self.on_command):
+                    result = await self.on_command(command, request_id, params)
+                else:
+                    result = self.on_command(command, request_id, params)
+                
+                # 如果回调返回了结果，自动发送响应
+                if result is not None:
+                    await self.send_command_result(command, request_id, result)
+                    
+            except Exception as e:
+                print(f"[WebSocket] 命令处理异常: {e}")
+                # 发送错误响应
+                await self.send_command_result(command, request_id, {
+                    "success": False,
+                    "error_message": str(e)
+                })
+        else:
+            print(f"[WebSocket] 未设置命令处理器，忽略命令: {command}")
+    
+    async def send_command_result(self, command: str, request_id: str, result: dict):
+        """
+        发送命令执行结果
+        
+        Args:
+            command: 命令名称
+            request_id: 请求 ID
+            result: 执行结果
+        """
+        message = {
+            "type": "command_result",
+            "command": command,
+            "data": {
+                "request_id": request_id,
+                **result
+            }
+        }
+        await self.send(message)
+        print(f"[WebSocket] 已发送命令结果: {command}, request_id={request_id}")
 
     async def send(self, data: dict):
         """发送消息"""
@@ -458,8 +539,22 @@ class AstrBotApiClient:
             self.state = ConnectionState.DISCONNECTED
             return False
 
-    async def start_websocket(self, session_id: str, on_message: Optional[Callable[[dict], None]] = None):
-        """启动 WebSocket 连接"""
+    async def start_websocket(
+        self,
+        session_id: str,
+        on_message: Optional[Callable[[dict], None]] = None,
+        on_command: Optional[Callable[[str, str, dict], Any]] = None,
+        ws_port: Optional[int] = None
+    ):
+        """
+        启动 WebSocket 连接
+        
+        Args:
+            session_id: 会话 ID
+            on_message: 消息处理回调，接收 dict 类型消息
+            on_command: 命令处理回调，接收 (command, request_id, params)，返回执行结果
+            ws_port: WebSocket 服务端口（默认 6190，独立 WS 服务器）
+        """
         if not self.token:
             print("启动 WebSocket 失败: 未登录")
             return
@@ -471,7 +566,9 @@ class AstrBotApiClient:
             server_url=self.server_url,
             token=self.token,
             session_id=session_id,
-            on_message=on_message
+            on_message=on_message,
+            on_command=on_command,
+            ws_port=ws_port
         )
         await self.ws_client.start()
 

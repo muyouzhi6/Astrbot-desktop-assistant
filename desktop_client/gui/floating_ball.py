@@ -811,6 +811,9 @@ class CompactChatWindow(QWidget):
         avatar.setFixedSize(32, 32)
         avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
+        t = theme_manager.current_theme
+        c = theme_manager.get_current_colors()  # 使用 get_current_colors() 获取应用了自定义颜色的最终配置
+        
         if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
             circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
             avatar.setPixmap(circular_avatar)
@@ -819,7 +822,7 @@ class CompactChatWindow(QWidget):
             # 使用 SVG 图标作为默认头像
             icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 20)
             avatar.setPixmap(icon_pixmap)
-            avatar.setStyleSheet("font-size: 20px;")
+            avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
@@ -862,6 +865,9 @@ class CompactChatWindow(QWidget):
         avatar.setFixedSize(32, 32)
         avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
+        t = theme_manager.current_theme
+        c = theme_manager.get_current_colors()  # 使用 get_current_colors() 获取应用了自定义颜色的最终配置
+        
         if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
             circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
             avatar.setPixmap(circular_avatar)
@@ -870,7 +876,7 @@ class CompactChatWindow(QWidget):
             # 使用 SVG 图标作为默认头像
             icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 20)
             avatar.setPixmap(icon_pixmap)
-            avatar.setStyleSheet("font-size: 20px;")
+            avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
@@ -1232,6 +1238,9 @@ class CompactChatWindow(QWidget):
             avatar.setFixedSize(24, 24)
             avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             
+            t = theme_manager.current_theme
+            c = theme_manager.get_current_colors()  # 使用 get_current_colors() 获取应用了自定义颜色的最终配置
+            
             if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
                 circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 24)
                 avatar.setPixmap(circular_avatar)
@@ -1240,7 +1249,7 @@ class CompactChatWindow(QWidget):
                 # 使用 SVG 图标作为默认头像
                 icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 16)
                 avatar.setPixmap(icon_pixmap)
-                avatar.setStyleSheet("font-size: 16px;")
+                avatar.setStyleSheet(f"font-size: 16px; background-color: {c.bg_tertiary}; border-radius: 12px;")
             
             layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
             
