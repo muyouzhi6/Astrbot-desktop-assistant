@@ -344,7 +344,7 @@ class ClientConfig:
             path = cls.get_config_path()
         
         print(f"[DEBUG] 尝试加载配置文件: {path}")
-        
+
         if not path.exists():
             print(f"[DEBUG] 配置文件不存在，创建默认配置文件: {path}")
             # 创建默认配置并保存

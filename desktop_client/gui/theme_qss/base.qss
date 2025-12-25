@@ -1,0 +1,113 @@
+/* ============================================
+   基础样式表 - 全局通用样式
+   所有主题都会加载此文件
+   ============================================ */
+
+/* 变量占位符 - 将被具体主题覆盖 */
+@primary: #007AFF;
+@bg-primary: #FFFFFF;
+@text-primary: #000000;
+
+/* ============================================
+   全局基础设置
+   ============================================ */
+
+* {
+    outline: none;
+}
+
+/* ============================================
+   通用按钮基础样式
+   ============================================ */
+
+QPushButton {
+    border: none;
+    padding: 6px 14px;
+    font-size: 13px;
+}
+
+QPushButton:disabled {
+    opacity: 0.5;
+}
+
+/* ============================================
+   输入框基础样式
+   ============================================ */
+
+QLineEdit, QTextEdit, QPlainTextEdit {
+    padding: 6px 10px;
+    font-size: 13px;
+    border: 1px solid;
+}
+
+QLineEdit:disabled, QTextEdit:disabled {
+    opacity: 0.6;
+}
+
+/* ============================================
+   下拉框基础样式
+   ============================================ */
+
+QComboBox {
+    padding: 6px 10px;
+    font-size: 13px;
+    border: 1px solid;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+}
+
+/* ============================================
+   分组框基础样式
+   ============================================ */
+
+QGroupBox {
+    font-weight: 600;
+    padding-top: 16px;
+    margin-top: 12px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+}
+
+/* ============================================
+   标签页基础样式
+   ============================================ */
+
+QTabWidget::pane {
+    border: 1px solid;
+}
+
+QTabBar::tab {
+    padding: 8px 16px;
+    font-size: 13px;
+}
+
+/* ============================================
+   滚动条基础样式
+   ============================================ */
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    height: 0px;
+    width: 0px;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}

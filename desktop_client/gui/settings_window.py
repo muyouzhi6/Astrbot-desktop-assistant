@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QSlider, QMessageBox,
     QTimeEdit, QColorDialog, QGridLayout
 )
-from PySide6.QtCore import Qt, Signal, QTime
+from PySide6.QtCore import Qt, Signal, QTime, QSize
 from qasync import asyncSlot
 
 from ..api_client import AstrBotApiClient
@@ -28,6 +28,7 @@ from ..utils.autostart import is_autostart_enabled, set_autostart
 from ..services import get_chat_history_manager
 from ..config import save_config, ClientConfig, CustomThemeConfig
 from .themes import theme_manager, Theme
+from .icons import icon_manager
 from .hotkeys import HotkeyConfig, hotkey_manager
 
 
@@ -209,25 +210,25 @@ class SettingsWindow(QWidget):
         self._tabs.setObjectName("settingsTabs")
         
         # 服务器设置
-        self._tabs.addTab(self._create_server_tab(), "🌐 服务器")
-        
+        self._tabs.addTab(self._create_server_tab(), "服务器")
+
         # 外观设置
-        self._tabs.addTab(self._create_appearance_tab(), "🎨 外观")
-        
+        self._tabs.addTab(self._create_appearance_tab(), "外观")
+
         # 快捷键设置
-        self._tabs.addTab(self._create_hotkeys_tab(), "⌨️ 快捷键")
-        
+        self._tabs.addTab(self._create_hotkeys_tab(), "快捷键")
+
         # 交互设置
-        self._tabs.addTab(self._create_interaction_tab(), "💬 交互")
-        
+        self._tabs.addTab(self._create_interaction_tab(), "交互")
+
         # 主动对话设置
-        self._tabs.addTab(self._create_proactive_tab(), "🤖 主动对话")
-        
+        self._tabs.addTab(self._create_proactive_tab(), "主动对话")
+
         # 存储设置
-        self._tabs.addTab(self._create_storage_tab(), "💾 存储")
-        
+        self._tabs.addTab(self._create_storage_tab(), "存储")
+
         # 自定义颜色设置
-        self._tabs.addTab(self._create_custom_colors_tab(), "🎨 自定义颜色")
+        self._tabs.addTab(self._create_custom_colors_tab(), "自定义颜色")
         
         main_layout.addWidget(self._tabs, 1)
         
@@ -244,8 +245,11 @@ class SettingsWindow(QWidget):
         layout = QHBoxLayout(title_bar)
         layout.setContentsMargins(16, 0, 16, 0)
         
-        icon = QLabel("⚙️")
+        icon = QLabel()
         icon.setObjectName("titleIcon")
+        # 使用 SVG 图标
+        c = theme_manager.get_current_colors()
+        icon.setPixmap(icon_manager.get_pixmap('settings', c.primary, 20))
         
         title = QLabel("设置")
         title.setObjectName("titleText")
@@ -336,7 +340,9 @@ class SettingsWindow(QWidget):
         self._user_avatar_preview.setFixedSize(48, 48)
         self._user_avatar_preview.setObjectName("avatarPreview")
         self._user_avatar_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._user_avatar_preview.setText("👤")
+        # 使用 SVG 图标作为默认用户头像
+        c = theme_manager.get_current_colors()
+        self._user_avatar_preview.setPixmap(icon_manager.get_pixmap('user', c.text_primary, 32))
         
         user_avatar_btns = QFrame()
         user_btns_layout = QHBoxLayout(user_avatar_btns)
@@ -372,7 +378,8 @@ class SettingsWindow(QWidget):
         self._bot_avatar_preview.setFixedSize(48, 48)
         self._bot_avatar_preview.setObjectName("avatarPreview")
         self._bot_avatar_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._bot_avatar_preview.setText("🤖")
+        # 使用 SVG 图标作为默认机器人头像
+        self._bot_avatar_preview.setPixmap(icon_manager.get_pixmap('bot', c.text_primary, 32))
         
         bot_avatar_btns = QFrame()
         bot_btns_layout = QHBoxLayout(bot_avatar_btns)
@@ -409,7 +416,8 @@ class SettingsWindow(QWidget):
         self._avatar_preview.setFixedSize(64, 64)
         self._avatar_preview.setObjectName("avatarPreview")
         self._avatar_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._avatar_preview.setText("🤖")
+        # 使用 SVG 图标作为默认头像
+        self._avatar_preview.setPixmap(icon_manager.get_pixmap('bot', c.text_primary, 40))
         
         avatar_btns = QFrame()
         btns_layout = QVBoxLayout(avatar_btns)
@@ -566,7 +574,7 @@ class SettingsWindow(QWidget):
         dnd_section.add_widget(self._do_not_disturb)
         
         dnd_info = QLabel(
-            "💡 提示：启用免打扰模式后，收到消息时悬浮球会显示脉冲动画提示，\n"
+            "提示：启用免打扰模式后，收到消息时悬浮球会显示脉冲动画提示，\n"
             "点击悬浮球可查看消息。语音消息会自动在后台播放。"
         )
         dnd_info.setWordWrap(True)
@@ -632,9 +640,13 @@ class SettingsWindow(QWidget):
         clear_btn_layout = QHBoxLayout(clear_btn_row)
         clear_btn_layout.setContentsMargins(0, 0, 0, 0)
         
-        self._clear_chat_btn = QPushButton("🗑️ 清空聊天记录")
+        self._clear_chat_btn = QPushButton("清空聊天记录")
         self._clear_chat_btn.setObjectName("dangerBtn")
         self._clear_chat_btn.clicked.connect(self._on_clear_chat_history)
+        # 设置删除图标
+        clear_icon = icon_manager.get_icon('trash', '#FF3B30', 16)
+        self._clear_chat_btn.setIcon(clear_icon)
+        self._clear_chat_btn.setIconSize(QSize(16, 16))
         
         # 获取当前聊天记录数量
         chat_manager = get_chat_history_manager()
@@ -695,7 +707,7 @@ class SettingsWindow(QWidget):
         self._color_pickers: Dict[str, ColorPickerButton] = {}
         
         # 主题色组
-        primary_section = SettingsSection("🎨 主题色 - 控制整体视觉风格")
+        primary_section = SettingsSection("主题色 - 控制整体视觉风格")
         primary_colors = [
             ("primary", "主色调", "【保存按钮、链接、选中状态】按钮背景、选中项高亮、标签页底部线条的颜色"),
             ("primary_light", "主色调（浅）", "【悬停效果】鼠标悬停时的浅色高亮效果"),
@@ -703,18 +715,18 @@ class SettingsWindow(QWidget):
         ]
         self._add_color_group(primary_section, primary_colors)
         layout.addWidget(primary_section)
-        
+
         # 背景色组
-        bg_section = SettingsSection("🖼️ 背景色 - 控制窗口和区域背景")
+        bg_section = SettingsSection("背景色 - 控制窗口和区域背景")
         bg_colors = [
             ("bg_primary", "主背景色", "【主窗口背景】聊天窗口、设置窗口的整体背景颜色"),
             ("bg_secondary", "次背景色", "【面板/卡片背景】设置分区、输入框区域、标签栏的背景颜色"),
         ]
         self._add_color_group(bg_section, bg_colors)
         layout.addWidget(bg_section)
-        
+
         # 文字色组
-        text_section = SettingsSection("📝 文字颜色 - 控制文字显示")
+        text_section = SettingsSection("文字颜色 - 控制文字显示")
         text_colors = [
             ("text_primary", "主文字色", "【标题、正文】窗口标题、消息内容、按钮文字的颜色"),
             ("text_secondary", "次文字色", "【描述、提示】标签说明、占位符文字、次要信息的颜色"),
@@ -722,9 +734,9 @@ class SettingsWindow(QWidget):
         ]
         self._add_color_group(text_section, text_colors)
         layout.addWidget(text_section)
-        
+
         # 悬浮球颜色组
-        ball_section = SettingsSection("🔮 悬浮球颜色 - 控制桌面悬浮球外观")
+        ball_section = SettingsSection("悬浮球颜色 - 控制桌面悬浮球外观")
         ball_colors = [
             ("ball_bg", "悬浮球背景", "【悬浮球圆形背景】桌面右下角悬浮球的填充颜色"),
             ("ball_glow", "悬浮球光晕", "【呼吸灯效果】悬浮球周围闪烁的光晕颜色"),
@@ -732,9 +744,9 @@ class SettingsWindow(QWidget):
         ]
         self._add_color_group(ball_section, ball_colors)
         layout.addWidget(ball_section)
-        
+
         # 聊天气泡颜色组
-        bubble_section = SettingsSection("💬 聊天气泡颜色 - 控制消息气泡外观")
+        bubble_section = SettingsSection("聊天气泡颜色 - 控制消息气泡外观")
         bubble_colors = [
             ("bubble_user_bg", "用户气泡背景", "【您发送的消息】用户消息气泡的背景颜色（右侧气泡）"),
             ("bubble_user_text", "用户气泡文字", "【您发送的消息文字】用户消息中文字的颜色"),
@@ -750,13 +762,21 @@ class SettingsWindow(QWidget):
         reset_btn_layout = QHBoxLayout(reset_btn_row)
         reset_btn_layout.setContentsMargins(0, 0, 0, 0)
         
-        self._reset_custom_colors_btn = QPushButton("🔄 恢复默认颜色")
+        self._reset_custom_colors_btn = QPushButton("恢复默认颜色")
         self._reset_custom_colors_btn.setToolTip("清除所有自定义颜色，恢复为当前主题的默认颜色")
         self._reset_custom_colors_btn.clicked.connect(self._on_reset_custom_colors)
-        
-        self._preview_colors_btn = QPushButton("👁️ 预览效果")
+        # 设置重置图标
+        reset_icon = icon_manager.get_icon('refresh-cw', '#409EFF', 16)
+        self._reset_custom_colors_btn.setIcon(reset_icon)
+        self._reset_custom_colors_btn.setIconSize(QSize(16, 16))
+
+        self._preview_colors_btn = QPushButton("预览效果")
         self._preview_colors_btn.setToolTip("立即应用当前颜色设置进行预览（不保存）")
         self._preview_colors_btn.clicked.connect(self._on_preview_custom_colors)
+        # 设置预览图标
+        preview_icon = icon_manager.get_icon('eye', '#409EFF', 16)
+        self._preview_colors_btn.setIcon(preview_icon)
+        self._preview_colors_btn.setIconSize(QSize(16, 16))
         
         reset_btn_layout.addWidget(self._reset_custom_colors_btn)
         reset_btn_layout.addWidget(self._preview_colors_btn)
@@ -766,7 +786,7 @@ class SettingsWindow(QWidget):
         layout.addWidget(reset_section)
         
         # 说明信息
-        info_section = SettingsSection("📖 使用说明")
+        info_section = SettingsSection("使用说明")
         info_label = QLabel(
             "• 启用自定义颜色后，您设置的颜色将覆盖当前主题的对应颜色。\n"
             "• 留空的颜色项将使用当前主题的默认颜色。\n"
@@ -774,7 +794,7 @@ class SettingsWindow(QWidget):
             "• 更换主题后，自定义颜色仍然有效。\n"
             "• 【即时生效】保存后颜色立即应用到所有界面。\n"
             "\n"
-            "💡 颜色对应关系示例：\n"
+            "颜色对应关系示例：\n"
             "  - 主色调 → 保存按钮、选中的标签页\n"
             "  - 主背景色 → 聊天窗口整体背景\n"
             "  - 次背景色 → 输入框区域、设置面板\n"
@@ -820,10 +840,14 @@ class SettingsWindow(QWidget):
             self._color_pickers[key] = color_btn
             
             # 清除按钮
-            clear_btn = QPushButton("✕")
+            clear_btn = QPushButton()
             clear_btn.setFixedSize(24, 24)
             clear_btn.setToolTip("清除此颜色")
             clear_btn.clicked.connect(lambda checked, k=key: self._on_clear_color(k))
+            # 设置关闭图标
+            close_icon = icon_manager.get_icon('close', '#909399', 14)
+            clear_btn.setIcon(close_icon)
+            clear_btn.setIconSize(QSize(14, 14))
             
             row_layout.addWidget(lbl)
             row_layout.addWidget(color_btn)
@@ -1452,7 +1476,8 @@ class SettingsWindow(QWidget):
     def _on_reset_avatar(self):
         """重置悬浮球头像"""
         self._avatar_preview.clear()
-        self._avatar_preview.setText("🤖")
+        c = theme_manager.get_current_colors()
+        self._avatar_preview.setPixmap(icon_manager.get_pixmap('bot', c.text_primary, 40))
         self._avatar_path = ""
         
     def _on_upload_user_avatar(self):
@@ -1478,7 +1503,8 @@ class SettingsWindow(QWidget):
     def _on_reset_user_avatar(self):
         """重置用户头像"""
         self._user_avatar_preview.clear()
-        self._user_avatar_preview.setText("👤")
+        c = theme_manager.get_current_colors()
+        self._user_avatar_preview.setPixmap(icon_manager.get_pixmap('user', c.text_primary, 32))
         self._user_avatar_path = ""
         
     def _on_upload_bot_avatar(self):
@@ -1504,7 +1530,8 @@ class SettingsWindow(QWidget):
     def _on_reset_bot_avatar(self):
         """重置Bot头像"""
         self._bot_avatar_preview.clear()
-        self._bot_avatar_preview.setText("🤖")
+        c = theme_manager.get_current_colors()
+        self._bot_avatar_preview.setPixmap(icon_manager.get_pixmap('bot', c.text_primary, 32))
         self._bot_avatar_path = ""
         
     @asyncSlot()

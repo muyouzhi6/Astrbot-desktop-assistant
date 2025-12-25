@@ -390,6 +390,9 @@ class ChatHistoryManager(QObject):
         if not os.path.exists(load_path):
             print(f"[ChatHistory] 聊天记录文件不存在: {load_path}，创建空历史记录文件")
             self._messages = []
+            self._dirty = True  # 标记为需要保存
+            # 创建空历史记录文件
+            self.save_to_file_sync(load_path)
             self._dirty = False
             
             # 自动创建空的聊天记录文件

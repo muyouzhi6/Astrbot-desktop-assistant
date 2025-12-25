@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QClipboard
 
 from .themes import theme_manager, Theme
+from .icons import icon_manager
 from .chat_widgets import (
     PasteAwareTextEdit, VoiceMessageWidget, VideoMessageWidget,
     FileMessageWidget, ClickableImageLabel, ImagePreviewDialog,
@@ -261,7 +262,7 @@ class CompactChatWindow(QWidget):
         input_layout.setSpacing(8)
         
         # 附件按钮
-        self._attach_btn = QPushButton("📎")
+        self._attach_btn = QPushButton()
         self._attach_btn.setObjectName("compactAttachBtn")
         self._attach_btn.setFixedSize(32, 40)
         self._attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -409,12 +410,15 @@ class CompactChatWindow(QWidget):
                 color: {c.text_primary};
                 border: 1px solid {c.border_light};
                 border-radius: {t.border_radius}px;
-                font-size: 16px;
             }}
             QPushButton#compactAttachBtn:hover {{
                 background-color: {c.bg_hover};
             }}
         """)
+        # 设置附件图标
+        attach_icon = icon_manager.get_icon('attach', c.text_primary, 18)
+        self._attach_btn.setIcon(attach_icon)
+        self._attach_btn.setIconSize(QSize(18, 18))
         
         # 刷新所有历史消息的样式 (主要是 MarkdownLabel 和用户消息气泡)
         for i in range(self._history_layout.count()):
@@ -618,7 +622,9 @@ class CompactChatWindow(QWidget):
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
-            avatar.setText("👤")
+            # 使用 SVG 图标作为默认头像
+            icon_pixmap = icon_manager.get_pixmap('user', c.text_inverse, 20)
+            avatar.setPixmap(icon_pixmap)
             avatar.setStyleSheet(f"font-size: 20px; background-color: {c.primary}; border-radius: 16px; color: white;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
@@ -654,7 +660,9 @@ class CompactChatWindow(QWidget):
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
-            avatar.setText("👤")
+            # 使用 SVG 图标作为默认头像
+            icon_pixmap = icon_manager.get_pixmap('user', c.text_inverse, 20)
+            avatar.setPixmap(icon_pixmap)
             avatar.setStyleSheet(f"font-size: 20px; background-color: {c.primary}; border-radius: 16px; color: white;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
@@ -686,7 +694,9 @@ class CompactChatWindow(QWidget):
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
-            avatar.setText("🤖")
+            # 使用 SVG 图标作为默认头像
+            icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 20)
+            avatar.setPixmap(icon_pixmap)
             avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -726,7 +736,9 @@ class CompactChatWindow(QWidget):
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
-            avatar.setText("🤖")
+            # 使用 SVG 图标作为默认头像
+            icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 20)
+            avatar.setPixmap(icon_pixmap)
             avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -765,7 +777,9 @@ class CompactChatWindow(QWidget):
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
-            avatar.setText("🤖")
+            # 使用 SVG 图标作为默认头像
+            icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 20)
+            avatar.setPixmap(icon_pixmap)
             avatar.setStyleSheet(f"font-size: 20px; background-color: {c.bg_tertiary}; border-radius: 16px;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -802,7 +816,9 @@ class CompactChatWindow(QWidget):
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
-            avatar.setText("🤖")
+            # 使用 SVG 图标作为默认头像
+            icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 20)
+            avatar.setPixmap(icon_pixmap)
             avatar.setStyleSheet("font-size: 20px;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -851,7 +867,9 @@ class CompactChatWindow(QWidget):
             avatar.setPixmap(circular_avatar)
             avatar.setStyleSheet("background: transparent;")
         else:
-            avatar.setText("🤖")
+            # 使用 SVG 图标作为默认头像
+            icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 20)
+            avatar.setPixmap(icon_pixmap)
             avatar.setStyleSheet("font-size: 20px;")
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -1219,7 +1237,9 @@ class CompactChatWindow(QWidget):
                 avatar.setPixmap(circular_avatar)
                 avatar.setStyleSheet("background: transparent;")
             else:
-                avatar.setText("🤖")
+                # 使用 SVG 图标作为默认头像
+                icon_pixmap = icon_manager.get_pixmap('bot', c.text_primary, 16)
+                avatar.setPixmap(icon_pixmap)
                 avatar.setStyleSheet("font-size: 16px;")
             
             layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
@@ -1805,25 +1825,25 @@ class FloatingBallWindow(QWidget):
                     int((radius - 4) * 2)
                 )
         else:
-            # 绘制默认图标
-            painter.setPen(QColor(255, 255, 255))
-            font = QFont("Segoe UI Emoji", int(radius))
-            painter.setFont(font)
-            
-            icon_text = "🤖"
+            # 绘制默认SVG图标
+            # 根据状态选择图标
+            icon_name = "bot"
             if self._state == FloatingBallState.DISCONNECTED:
-                icon_text = "🔌"
+                icon_name = "zap-off"
             elif self._state == FloatingBallState.BUSY:
-                icon_text = "💭"
+                icon_name = "message-square"
             elif self._state == FloatingBallState.PROCESSING:
-                icon_text = "✨"
-                
-            painter.drawText(
-                QRectF(center_x - radius, center_y - radius, radius * 2, radius * 2),
-                Qt.AlignmentFlag.AlignCenter,
-                icon_text
-            )
-            
+                icon_name = "refresh-cw"
+
+            # 获取白色图标（确保在彩色背景上清晰可见）
+            icon_size = int(radius * 1.2)  # 图标大小约为半径的1.2倍
+            icon_pixmap = icon_manager.get_pixmap(icon_name, "#FFFFFF", icon_size)
+
+            # 居中绘制图标
+            icon_x = center_x - icon_size // 2
+            icon_y = center_y - icon_size // 2
+            painter.drawPixmap(int(icon_x), int(icon_y), icon_pixmap)
+
             # 绘制状态小红点 (如果不是正常状态且有自定义头像时)
             if self._state != FloatingBallState.NORMAL and self._custom_avatar:
                  status_radius = 6
@@ -2002,31 +2022,36 @@ class FloatingBallWindow(QWidget):
         """)
         
         # 截图功能
-        region_screenshot_action = menu.addAction("✂️ 区域截图")
+        region_screenshot_action = menu.addAction("区域截图")
+        region_screenshot_action.setIcon(icon_manager.get_icon('screenshot', c.text_primary, 16))
         region_screenshot_action.triggered.connect(self._on_region_screenshot)
-        
-        full_screenshot_action = menu.addAction("🖥️ 全屏截图")
+
+        full_screenshot_action = menu.addAction("全屏截图")
+        full_screenshot_action.setIcon(icon_manager.get_icon('screenshot', c.text_primary, 16))
         full_screenshot_action.triggered.connect(self._on_full_screenshot)
-        
+
         menu.addSeparator()
-        
+
         # 主题子菜单
-        theme_menu = menu.addMenu("🎨 切换主题")
+        theme_menu = menu.addMenu("切换主题")
+        theme_menu.setIcon(icon_manager.get_icon('theme', c.text_primary, 16))
         theme_menu.setStyleSheet(menu.styleSheet())
-        
+
         for theme_name, display_name in theme_manager.get_theme_names():
             action = theme_menu.addAction(display_name)
             action.triggered.connect(lambda checked, n=theme_name: theme_manager.set_theme(n))
-        
+
         menu.addSeparator()
-        
-        restart_action = menu.addAction("🔄 重启")
+
+        restart_action = menu.addAction("重启")
         restart_action.triggered.connect(self.restart_requested.emit)
         
-        settings_action = menu.addAction("⚙️ 设置")
+        settings_action = menu.addAction("设置")
+        settings_action.setIcon(icon_manager.get_icon('settings', c.text_primary, 16))
         settings_action.triggered.connect(self.settings_requested.emit)
-        
-        quit_action = menu.addAction("❌ 退出")
+
+        quit_action = menu.addAction("退出")
+        quit_action.setIcon(icon_manager.get_icon('exit', c.danger, 16))
         quit_action.triggered.connect(self.quit_requested.emit)
         
         menu.exec(pos)

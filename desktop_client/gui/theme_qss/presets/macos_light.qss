@@ -1,0 +1,464 @@
+/* ============================================
+   macOS Big Sur / Ventura 浅色主题
+
+   特点：
+   - 系统蓝色调 (#007AFF)
+   - 浅灰背景 (#F5F5F7)
+   - 较小圆角 (6-10px)
+   - 细字体
+   - 半透明效果
+   ============================================ */
+
+/* ============================================
+   颜色变量定义
+   ============================================ */
+
+@primary: #007AFF;
+@primary-light: #3395FF;
+@primary-dark: #0051D5;
+
+@success: #34C759;
+@warning: #FF9500;
+@danger: #FF3B30;
+
+@bg-primary: #FFFFFF;
+@bg-secondary: #F5F5F7;
+@bg-tertiary: #E8E8ED;
+@bg-hover: #E5E5EA;
+
+@text-primary: #1D1D1F;
+@text-secondary: #6E6E73;
+@text-tertiary: #86868B;
+@text-placeholder: #A1A1A6;
+
+@border-light: #D1D1D6;
+@border-lighter: #E5E5EA;
+
+@shadow-light: rgba(0, 0, 0, 0.08);
+@shadow-medium: rgba(0, 0, 0, 0.12);
+
+@border-radius: 10px;
+@border-radius-small: 6px;
+@border-radius-large: 14px;
+
+/* ============================================
+   全局样式
+   ============================================ */
+
+* {
+    font-family: -apple-system, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: @text-primary;
+}
+
+QWidget {
+    background-color: @bg-secondary;
+}
+
+/* ============================================
+   按钮样式
+   ============================================ */
+
+QPushButton {
+    background-color: @bg-secondary;
+    color: @text-primary;
+    border: none;
+    border-radius: @border-radius-small;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: @bg-hover;
+}
+
+QPushButton:pressed {
+    background-color: @bg-tertiary;
+}
+
+QPushButton:disabled {
+    opacity: 0.5;
+}
+
+/* 主要按钮样式 */
+QPushButton[primary="true"],
+QPushButton#primaryButton,
+QPushButton#sendButton,
+QPushButton#compactSendBtn {
+    background-color: @primary;
+    color: white;
+    font-weight: 600;
+}
+
+QPushButton[primary="true"]:hover,
+QPushButton#primaryButton:hover,
+QPushButton#sendButton:hover,
+QPushButton#compactSendBtn:hover {
+    background-color: @primary-light;
+}
+
+QPushButton[primary="true"]:pressed,
+QPushButton#primaryButton:pressed,
+QPushButton#sendButton:pressed,
+QPushButton#compactSendBtn:pressed {
+    background-color: @primary-dark;
+}
+
+/* 关闭按钮 */
+QPushButton#compactCloseBtn {
+    background: transparent;
+    color: @text-secondary;
+    border-radius: 12px;
+    padding: 4px;
+}
+
+QPushButton#compactCloseBtn:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: @text-primary;
+}
+
+/* 附件按钮 */
+QPushButton#compactAttachBtn {
+    background-color: @bg-secondary;
+    color: @text-primary;
+    border: 1px solid @border-light;
+    border-radius: 16px;
+    padding: 6px 12px;
+}
+
+QPushButton#compactAttachBtn:hover {
+    background-color: @bg-hover;
+}
+
+/* ============================================
+   输入框样式
+   ============================================ */
+
+QLineEdit, QTextEdit, QPlainTextEdit {
+    background-color: @bg-primary;
+    color: @text-primary;
+    border: 1px solid @border-light;
+    border-radius: @border-radius-small;
+    padding: 6px 10px;
+    font-size: 13px;
+    selection-background-color: @primary;
+    selection-color: white;
+}
+
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border: 2px solid @primary;
+    padding: 5px 9px;
+}
+
+QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled {
+    background-color: @bg-secondary;
+    color: @text-tertiary;
+    opacity: 0.6;
+}
+
+/* ============================================
+   下拉框样式
+   ============================================ */
+
+QComboBox {
+    background-color: @bg-primary;
+    color: @text-primary;
+    border: 1px solid @border-light;
+    border-radius: @border-radius-small;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+QComboBox:hover {
+    border-color: @primary;
+}
+
+QComboBox:focus {
+    border: 2px solid @primary;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid @text-secondary;
+    width: 0;
+    height: 0;
+}
+
+QComboBox QAbstractItemView {
+    background-color: @bg-primary;
+    border: 1px solid @border-light;
+    border-radius: @border-radius-small;
+    selection-background-color: @primary;
+    selection-color: white;
+    padding: 4px;
+}
+
+/* ============================================
+   滚动条样式 - macOS Big Sur 风格
+   ============================================ */
+
+/* 垂直滚动条 */
+QScrollBar:vertical {
+    background-color: transparent;
+    width: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    min-height: 30px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+QScrollBar::handle:vertical:pressed {
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* 水平滚动条 */
+QScrollBar:horizontal {
+    background-color: transparent;
+    height: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    min-width: 30px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+QScrollBar::handle:horizontal:pressed {
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* 移除箭头按钮和分页区域 */
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+    border: none;
+    width: 0px;
+    height: 0px;
+}
+
+/* ============================================
+   滚动区域样式
+   ============================================ */
+
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollArea#compactScroll {
+    background: transparent;
+    border: none;
+}
+
+/* ============================================
+   菜单样式
+   ============================================ */
+
+QMenu {
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid @border-lighter;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+QMenu::item {
+    background-color: transparent;
+    color: @text-primary;
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+QMenu::item:selected {
+    background-color: @primary;
+    color: white;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: @border-lighter;
+    margin: 4px 8px;
+}
+
+QMenu::icon {
+    padding-left: 10px;
+}
+
+/* ============================================
+   对话框和窗口
+   ============================================ */
+
+QDialog, QMainWindow {
+    background-color: @bg-secondary;
+}
+
+/* 紧凑聊天窗口容器 */
+QFrame#compactContainer {
+    background-color: @bg-primary;
+    border: 1px solid @border-light;
+    border-radius: @border-radius-large;
+}
+
+/* ============================================
+   分组框样式
+   ============================================ */
+
+QGroupBox {
+    background-color: transparent;
+    border: 1px solid @border-light;
+    border-radius: @border-radius;
+    margin-top: 12px;
+    padding-top: 16px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    color: @text-primary;
+}
+
+/* ============================================
+   标签样式
+   ============================================ */
+
+QLabel {
+    color: @text-primary;
+    background-color: transparent;
+    font-size: 13px;
+}
+
+QLabel[heading="true"] {
+    font-size: 16px;
+    font-weight: 600;
+    color: @text-primary;
+}
+
+QLabel[secondary="true"] {
+    color: @text-secondary;
+    font-size: 12px;
+}
+
+/* ============================================
+   复选框和单选框
+   ============================================ */
+
+QCheckBox, QRadioButton {
+    color: @text-primary;
+    spacing: 6px;
+    font-size: 13px;
+}
+
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid @border-light;
+    background-color: @bg-primary;
+}
+
+QCheckBox::indicator {
+    border-radius: 3px;
+}
+
+QRadioButton::indicator {
+    border-radius: 8px;
+}
+
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+    background-color: @primary;
+    border-color: @primary;
+}
+
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: @primary;
+}
+
+/* ============================================
+   进度条样式
+   ============================================ */
+
+QProgressBar {
+    background-color: @bg-tertiary;
+    border: none;
+    border-radius: 4px;
+    height: 8px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background-color: @primary;
+    border-radius: 4px;
+}
+
+/* ============================================
+   标签页样式
+   ============================================ */
+
+QTabWidget::pane {
+    background-color: @bg-primary;
+    border: 1px solid @border-light;
+    border-radius: @border-radius-small;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background-color: transparent;
+    color: @text-secondary;
+    border: none;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+QTabBar::tab:selected {
+    color: @primary;
+    font-weight: 600;
+}
+
+QTabBar::tab:hover {
+    color: @text-primary;
+}
+
+/* ============================================
+   工具提示样式
+   ============================================ */
+
+QToolTip {
+    background-color: rgba(0, 0, 0, 0.85);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
