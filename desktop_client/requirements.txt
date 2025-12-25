@@ -5,7 +5,7 @@ PySide6>=6.5.0
 qasync>=0.27.1
 
 # HTTP 客户端
-httpx>=0.24.0
+httpx[http2]>=0.24.0
 httpx-sse>=0.4.0
 
 # WebSocket 客户端

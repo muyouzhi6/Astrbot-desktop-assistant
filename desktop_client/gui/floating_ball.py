@@ -13,6 +13,7 @@
 
 from typing import Callable, Optional, Set
 import os
+import sys
 import math
 from enum import Enum
 
@@ -41,6 +42,78 @@ from .chat_widgets import (
 )
 from .markdown_utils import MarkdownLabel
 from ..services import get_chat_history_manager, ChatMessage
+
+
+# macOS 窗口置顶支持
+# 使用 PyObjC 设置 NSWindow.level 实现真正的置顶效果
+_HAS_PYOBJC = False
+_NSFloatingWindowLevel = 3  # NSFloatingWindowLevel 常量值
+
+if sys.platform == "darwin":
+    try:
+        from AppKit import NSApplication, NSFloatingWindowLevel as _NSFloatingWindowLevel
+        from Cocoa import NSApp
+        _HAS_PYOBJC = True
+    except ImportError:
+        # PyObjC 未安装，回退到 Qt 默认行为
+        print("[macOS] PyObjC 未安装，窗口置顶功能可能受限。建议安装: pip install pyobjc-framework-Cocoa")
+        _HAS_PYOBJC = False
+
+
+def _set_macos_window_level(widget: QWidget, level: Optional[int] = None):
+    """
+    在 macOS 上设置窗口层级以实现真正的置顶效果
+    
+    Args:
+        widget: Qt 窗口组件
+        level: NSWindow 层级，默认为 NSFloatingWindowLevel (3)
+    """
+    if sys.platform != "darwin" or not _HAS_PYOBJC:
+        return
+    
+    actual_level = level if level is not None else _NSFloatingWindowLevel
+    
+    try:
+        # 获取窗口的 native window handle (NSWindow)
+        window_id = widget.winId()
+        if window_id:
+            # 通过 NSApp 获取所有窗口，找到匹配的窗口
+            from AppKit import NSApp
+            for ns_window in NSApp.windows():
+                # 检查窗口编号是否匹配
+                if ns_window.windowNumber() == int(window_id):
+                    ns_window.setLevel_(actual_level)
+                    # 设置窗口收集行为，确保在所有桌面空间可见
+                    ns_window.setCollectionBehavior_(
+                        ns_window.collectionBehavior() |
+                        (1 << 0) |  # NSWindowCollectionBehaviorCanJoinAllSpaces
+                        (1 << 4)    # NSWindowCollectionBehaviorFullScreenAuxiliary
+                    )
+                    print(f"[macOS] 已设置窗口层级为 {actual_level}")
+                    return
+            
+            # 如果上述方法失败，尝试使用 Objective-C runtime
+            try:
+                import objc
+                from Cocoa import NSWindow
+                
+                # 将 window_id 转换为 NSWindow 对象
+                # PySide6 的 winId() 返回的是 NSView 的指针
+                ns_view = objc.objc_object(c_void_p=int(window_id))
+                if hasattr(ns_view, 'window') and ns_view.window():
+                    ns_window = ns_view.window()
+                    ns_window.setLevel_(actual_level)
+                    ns_window.setCollectionBehavior_(
+                        ns_window.collectionBehavior() |
+                        (1 << 0) |  # NSWindowCollectionBehaviorCanJoinAllSpaces
+                        (1 << 4)    # NSWindowCollectionBehaviorFullScreenAuxiliary
+                    )
+                    print(f"[macOS] 已通过 NSView 设置窗口层级为 {actual_level}")
+            except Exception as e2:
+                print(f"[macOS] 备用方法设置窗口层级失败: {e2}")
+                
+    except Exception as e:
+        print(f"[macOS] 设置窗口层级失败: {e}")
 
 
 class FloatingBallState(Enum):
@@ -1386,6 +1459,10 @@ class CompactChatWindow(QWidget):
         self._input.setFocus()
         QTimer.singleShot(100, self._scroll_to_bottom)
         
+        # macOS: 设置窗口置顶层级
+        if sys.platform == "darwin":
+            QTimer.singleShot(50, lambda: _set_macos_window_level(self))
+        
         # 启动自动隐藏定时器
         if self._auto_hide_enabled:
             self._auto_hide_timer.start(self._auto_hide_duration)
@@ -2107,3 +2184,11 @@ class FloatingBallWindow(QWidget):
     def has_unread_message(self) -> bool:
         """检查是否有未读消息"""
         return self._has_unread
+    
+    def showEvent(self, event):
+        """窗口显示事件"""
+        super().showEvent(event)
+        
+        # macOS: 设置窗口置顶层级
+        if sys.platform == "darwin":
+            QTimer.singleShot(50, lambda: _set_macos_window_level(self))
