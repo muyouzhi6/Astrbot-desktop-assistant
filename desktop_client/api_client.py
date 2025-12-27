@@ -49,14 +49,20 @@ class SSEEvent:
 
 
 class WebSocketClient:
-    """WebSocket 客户端，用于实时双向通信"""
+    """WebSocket 客户端，用于实时双向通信
     
-    # 心跳配置常量 - 与服务端保持一致
-    PING_INTERVAL = 30  # 心跳间隔（秒）
-    PING_TIMEOUT = 20   # 心跳超时（秒）
-    HEARTBEAT_INTERVAL = 25  # 应用层心跳间隔（秒），略小于 PING_INTERVAL
-    # 服务端 CLIENT_INACTIVE_TIMEOUT = 120 秒，这里设置为稍小的值
-    HEARTBEAT_ACK_TIMEOUT = 100  # 心跳响应超时阈值（秒），略小于服务端超时
+    稳定性增强（参考 Satori 适配器的成功模式）：
+    - 心跳间隔从 25 秒降到 10 秒
+    - 自动响应服务端 server_ping
+    - 支持忙碌状态报告，长操作时延长超时
+    """
+    
+    # 心跳配置常量 - 参考 Satori 适配器使用 10 秒间隔
+    PING_INTERVAL = 10  # WebSocket 底层心跳间隔（秒）- 从 30 秒降到 10 秒
+    PING_TIMEOUT = 10   # WebSocket 底层心跳超时（秒）- 从 20 秒降到 10 秒
+    HEARTBEAT_INTERVAL = 10  # 应用层心跳间隔（秒）- 从 25 秒降到 10 秒
+    # 服务端 CLIENT_INACTIVE_TIMEOUT = 60 秒，这里设置为稍小的值
+    HEARTBEAT_ACK_TIMEOUT = 50  # 心跳响应超时阈值（秒）- 从 100 秒降到 50 秒
     
     # 连接质量监控阈值
     HIGH_LATENCY_THRESHOLD = 5.0  # 高延迟阈值（秒）
@@ -154,6 +160,10 @@ class WebSocketClient:
         
         # 服务端配置（连接后从服务端获取）
         self._server_timeout_config: Optional[dict] = None
+        
+        # 忙碌状态追踪
+        self._is_busy: bool = False
+        self._busy_operation: str = ""
         
     async def start(self):
         """启动 WebSocket 客户端"""
@@ -318,10 +328,36 @@ class WebSocketClient:
                                 print(f"[WebSocket] 收到服务端配置: {self._server_timeout_config}")
                                 continue
                             
-                            # 处理连接状态广播
+                            # 处理连接状态广播（包含服务端配置）
                             if data.get("type") == "connection_status":
-                                # 服务端主动通知连接状态
-                                print(f"[WebSocket] 服务端确认连接状态: {data.get('status')}")
+                                status = data.get('status')
+                                config = data.get('config', {})
+                                print(f"[WebSocket] 服务端确认连接状态: {status}")
+                                if config:
+                                    self._server_timeout_config = config
+                                    print(f"[WebSocket] 服务端配置: {config}")
+                                continue
+                            
+                            # 处理服务端主动探测（server_ping）- 立即响应
+                            if data.get("type") == "server_ping":
+                                server_timestamp = data.get("timestamp", 0)
+                                # 发送 server_pong 响应
+                                pong_msg = {
+                                    "type": "server_pong",
+                                    "client_timestamp": server_timestamp,
+                                    "response_time": time.time(),
+                                    "session_id": self.session_id
+                                }
+                                await self.ws.send(json.dumps(pong_msg))
+                                # 更新活跃时间
+                                self._last_message_time = time.time()
+                                continue
+                            
+                            # 处理忙碌状态确认
+                            if data.get("type") == "busy_state_ack":
+                                is_busy = data.get("is_busy", False)
+                                operation = data.get("operation", "")
+                                print(f"[WebSocket] 忙碌状态确认: is_busy={is_busy}, operation={operation}")
                                 continue
                             
                             # 处理服务端下发的命令
@@ -600,6 +636,52 @@ class WebSocketClient:
             "data": state_data,
         }
         await self.send(message)
+    
+    async def set_busy_state(self, is_busy: bool, operation: str = "", duration: int = 30):
+        """
+        设置忙碌状态
+        
+        在执行长时间操作（如截图、文件传输）前调用，通知服务端延长超时时间。
+        
+        Args:
+            is_busy: 是否进入忙碌状态
+            operation: 操作名称（如 "screenshot", "file_upload"）
+            duration: 预计操作持续时间（秒），最大 120 秒
+        """
+        self._is_busy = is_busy
+        self._busy_operation = operation if is_busy else ""
+        
+        message = {
+            "type": "busy_state",
+            "is_busy": is_busy,
+            "operation": operation,
+            "duration": min(duration, 120),  # 最大 120 秒
+            "timestamp": time.time()
+        }
+        await self.send(message)
+        
+        if is_busy:
+            print(f"[WebSocket] 进入忙碌状态: {operation}，预计 {duration}s")
+        else:
+            print(f"[WebSocket] 退出忙碌状态: {operation}")
+    
+    async def with_busy_state(self, operation: str, duration: int = 30):
+        """
+        忙碌状态上下文管理器
+        
+        使用方法:
+            async with client.with_busy_state("screenshot", 60):
+                # 执行截图操作
+                result = await take_screenshot()
+        
+        Args:
+            operation: 操作名称
+            duration: 预计操作持续时间（秒）
+        
+        Returns:
+            异步上下文管理器
+        """
+        return BusyStateContext(self, operation, duration)
         
     @property
     def is_connected(self) -> bool:
@@ -627,7 +709,26 @@ class WebSocketClient:
             "last_heartbeat_age": current_time - self._last_heartbeat_ack if self._last_heartbeat_ack else None,
             "last_pong_age": current_time - self._last_pong_time if self._last_pong_time else None,
             "server_config": self._server_timeout_config,
+            "is_busy": self._is_busy,
+            "busy_operation": self._busy_operation,
         }
+
+
+class BusyStateContext:
+    """忙碌状态上下文管理器"""
+    
+    def __init__(self, client: WebSocketClient, operation: str, duration: int):
+        self.client = client
+        self.operation = operation
+        self.duration = duration
+    
+    async def __aenter__(self):
+        await self.client.set_busy_state(True, self.operation, self.duration)
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.client.set_busy_state(False, self.operation)
+        return False
 
 
 class AstrBotApiClient:
@@ -680,7 +781,38 @@ class AstrBotApiClient:
     
     @property
     def is_connected(self) -> bool:
-        return self._state == ConnectionState.CONNECTED
+        """
+        综合判断连接状态
+        
+        考虑 HTTP API 状态和 WebSocket 状态：
+        - HTTP 连接正常 -> 已连接
+        - HTTP 断开但 WebSocket 正常 -> 仍视为已连接（可发送消息）
+        - 两者都断开 -> 未连接
+        """
+        # HTTP 状态正常
+        if self._state == ConnectionState.CONNECTED:
+            return True
+        # HTTP 异常但 WebSocket 正常
+        if self._ws_connection_state == "connected":
+            return True
+        return False
+    
+    @property
+    def is_fully_connected(self) -> bool:
+        """检查是否完全连接（HTTP 和 WebSocket 都正常）"""
+        return self._state == ConnectionState.CONNECTED and self._ws_connection_state == "connected"
+    
+    @property
+    def connection_summary(self) -> dict:
+        """获取连接状态摘要"""
+        return {
+            "http_connected": self._state == ConnectionState.CONNECTED,
+            "ws_connected": self._ws_connection_state == "connected",
+            "is_connected": self.is_connected,
+            "is_fully_connected": self.is_fully_connected,
+            "http_state": self._state.value,
+            "ws_state": self._ws_connection_state,
+        }
     
     @property
     def api_base(self) -> str:
@@ -792,9 +924,15 @@ class AstrBotApiClient:
                     
                     # 只有连续失败达到阈值才触发断联
                     if self._health_check_failures >= effective_max_failures:
-                        print("[API Client] ❌ 连续健康检测失败达到阈值，触发重连")
-                        self._health_check_failures = 0  # 重置计数
-                        self.state = ConnectionState.DISCONNECTED
+                        ws_connected = self._ws_connection_state == "connected"
+                        if ws_connected:
+                            # WebSocket 仍然正常，只记录警告，不断开连接
+                            print("[API Client] ⚠️ HTTP 健康检测失败但 WebSocket 正常，保持连接")
+                            self._health_check_failures = 0  # 重置计数，继续监控
+                        else:
+                            print("[API Client] ❌ HTTP 和 WebSocket 都异常，触发重连")
+                            self._health_check_failures = 0
+                            self.state = ConnectionState.DISCONNECTED
                 else:
                     # 检测成功，重置失败计数
                     self._health_check_failures = 0
