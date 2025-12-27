@@ -124,6 +124,8 @@ class VoiceConfig:
     """语音配置"""
     enable_tts: bool = True
     auto_play_voice: bool = False
+    # TTS 文字语音同时输出（对应 AstrBot 的 provider_tts_settings.dual_output）
+    dual_output: bool = False
 
 
 # 缓存配置目录路径，避免重复计算
@@ -468,6 +470,7 @@ class ClientConfig:
             # 语音配置
             'enable_tts': self.voice.enable_tts,
             'auto_play_voice': self.voice.auto_play_voice,
+            'dual_output': self.voice.dual_output,
         }
     
     def update_from_legacy_dict(self, legacy: dict):
@@ -505,6 +508,8 @@ class ClientConfig:
             self.voice.enable_tts = legacy['enable_tts']
         if 'auto_play_voice' in legacy:
             self.voice.auto_play_voice = legacy['auto_play_voice']
+        if 'dual_output' in legacy:
+            self.voice.dual_output = legacy['dual_output']
 
 
 def load_config(config_path: Optional[str] = None) -> ClientConfig:

@@ -50,6 +50,16 @@ class SSEEvent:
 class WebSocketClient:
     """WebSocket 客户端，用于实时双向通信"""
     
+    # 心跳配置常量 - 与服务端保持一致
+    PING_INTERVAL = 30  # 心跳间隔（秒）
+    PING_TIMEOUT = 20   # 心跳超时（秒）
+    HEARTBEAT_INTERVAL = 25  # 应用层心跳间隔（秒），略小于 PING_INTERVAL
+    
+    # 重连配置
+    BASE_RECONNECT_DELAY = 1  # 基础重连延迟（秒）
+    MAX_RECONNECT_DELAY = 60  # 最大重连延迟（秒）
+    RECONNECT_JITTER = 0.5  # 重连抖动因子（避免同时重连）
+    
     def __init__(
         self,
         server_url: str,
@@ -57,6 +67,7 @@ class WebSocketClient:
         session_id: str,
         on_message: Optional[Callable[[dict], None]] = None,
         on_command: Optional[Callable[[str, str, dict], Any]] = None,
+        on_connection_state: Optional[Callable[[str], None]] = None,
         ws_port: Optional[int] = None
     ):
         """
@@ -66,6 +77,7 @@ class WebSocketClient:
             ws_port: WebSocket 服务端口。
                      - 如果指定了端口（如 6190），将连接到该独立端口
                      - 如果为 None，将复用 API 端口（统一端口模式）
+            on_connection_state: 连接状态变化回调，参数为状态字符串
         """
         # 解析服务器 URL，提取 host 和 port
         from urllib.parse import urlparse
@@ -101,11 +113,24 @@ class WebSocketClient:
         
         self.on_message = on_message
         self.on_command = on_command  # 命令处理回调: (command, request_id, params) -> result
+        self.on_connection_state = on_connection_state  # 连接状态回调
         self.ws = None
         
         self._running = False
         self._reconnect_task: Optional[asyncio.Task] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
+        
+        # 心跳状态跟踪
+        self._last_heartbeat_ack: float = 0  # 上次收到心跳响应的时间
+        self._heartbeat_failures: int = 0  # 连续心跳失败次数
+        self._max_heartbeat_failures: int = 3  # 最大允许连续失败次数
+        
+        # 连接质量监控
+        self._connection_state: str = "disconnected"  # disconnected, connecting, connected, reconnecting
+        self._last_message_time: float = 0  # 上次收到消息的时间
+        self._total_reconnects: int = 0  # 总重连次数
+        self._successful_pings: int = 0  # 成功的心跳次数
+        self._failed_pings: int = 0  # 失败的心跳次数
         
     async def start(self):
         """启动 WebSocket 客户端"""
@@ -113,57 +138,107 @@ class WebSocketClient:
             return
             
         self._running = True
+        self._set_connection_state("connecting")
         self._reconnect_task = asyncio.create_task(self._connect_loop())
+    
+    def _set_connection_state(self, state: str):
+        """设置连接状态并触发回调"""
+        if self._connection_state != state:
+            old_state = self._connection_state
+            self._connection_state = state
+            print(f"[WebSocket] 连接状态: {old_state} -> {state}")
+            if self.on_connection_state:
+                try:
+                    self.on_connection_state(state)
+                except Exception as e:
+                    print(f"[WebSocket] 状态回调异常: {e}")
         
     async def stop(self):
         """停止 WebSocket 客户端"""
         self._running = False
+        self._set_connection_state("disconnected")
         
+        # 先取消心跳任务
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
+        
+        # 关闭 WebSocket 连接
         if self.ws:
-            await self.ws.close()
+            try:
+                await self.ws.close(1000, "Client stopping")
+            except Exception as e:
+                print(f"[WebSocket] 关闭连接时出错: {e}")
+            self.ws = None
             
+        # 取消重连任务
         if self._reconnect_task:
             self._reconnect_task.cancel()
             try:
                 await self._reconnect_task
             except asyncio.CancelledError:
                 pass
-                
-        if self._heartbeat_task:
-            self._heartbeat_task.cancel()
+            self._reconnect_task = None
             
     async def _connect_loop(self):
-        """连接维护循环（自动重连，指数退避）"""
+        """连接维护循环（自动重连，指数退避 + 抖动）"""
+        import random
         reconnect_attempts = 0
-        max_reconnect_delay = 60  # 最大重连间隔60秒
-        base_delay = 2  # 基础重连间隔2秒
         
         while self._running:
             try:
-                print(f"正在连接 WebSocket: {self.url}")
+                if reconnect_attempts > 0:
+                    self._set_connection_state("reconnecting")
+                else:
+                    self._set_connection_state("connecting")
+                
+                print(f"[WebSocket] 正在连接: {self.url}")
+                
                 async with websockets.connect(
                     self.url,
-                    ping_interval=20,  # 20秒发送ping
-                    ping_timeout=10,   # 10秒超时
-                    close_timeout=5,   # 关闭超时5秒
+                    ping_interval=self.PING_INTERVAL,  # 30秒发送ping（与服务端一致）
+                    ping_timeout=self.PING_TIMEOUT,    # 20秒超时（增加容错）
+                    close_timeout=10,                   # 关闭超时10秒
+                    max_size=10 * 1024 * 1024,         # 最大消息大小 10MB
+                    compression=None,                   # 禁用压缩以减少 CPU 开销
                 ) as ws:
                     self.ws = ws
                     reconnect_attempts = 0  # 重置重连计数
-                    print("WebSocket 已连接")
+                    self._heartbeat_failures = 0  # 重置心跳失败计数
+                    self._last_heartbeat_ack = time.time()  # 初始化心跳时间
+                    self._last_message_time = time.time()
+                    self._set_connection_state("connected")
+                    print("[WebSocket] ✅ 连接成功")
                     
-                    # 启动心跳
+                    # 启动应用层心跳
                     self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
                     
                     # 消息接收循环
                     async for message in ws:
                         if not self._running:
                             break
+                        
+                        # 更新最后消息时间
+                        self._last_message_time = time.time()
                             
                         try:
                             data = json.loads(message)
                             
-                            # 处理心跳响应
+                            # 处理心跳响应 - 更新心跳状态
                             if data.get("type") == "heartbeat_ack":
+                                self._last_heartbeat_ack = time.time()
+                                self._heartbeat_failures = 0  # 收到响应，重置失败计数
+                                self._successful_pings += 1
+                                continue
+                            
+                            # 处理连接状态广播
+                            if data.get("type") == "connection_status":
+                                # 服务端主动通知连接状态
+                                print(f"[WebSocket] 服务端确认连接状态: {data.get('status')}")
                                 continue
                             
                             # 处理服务端下发的命令
@@ -178,41 +253,111 @@ class WebSocketClient:
                                 else:
                                     self.on_message(data)
                         except json.JSONDecodeError:
-                            print(f"收到无效 JSON 消息: {message}")
+                            print(f"[WebSocket] 收到无效 JSON 消息: {message[:100]}...")
                         except Exception as e:
-                            print(f"处理消息出错: {e}")
+                            print(f"[WebSocket] 处理消息出错: {e}")
+                            import traceback
+                            traceback.print_exc()
                             
-            except (websockets.ConnectionClosed, ConnectionRefusedError) as e:
-                print(f"[WebSocket] 连接断开/失败: {e}")
-                print(f"  - 目标 URL: {self.url}")
-                print(f"  - 检查步骤:")
-                print(f"    1. 确保 AstrBot 服务器已启动")
-                print(f"    2. 确保桌面助手插件已启用")
-                print(f"    3. 如果是远程连接，确保防火墙已开放 WebSocket 端口")
+            except websockets.ConnectionClosed as e:
+                # 区分正常关闭和异常关闭
+                if e.code == 1000:
+                    print(f"[WebSocket] 连接正常关闭")
+                elif e.code == 1001:
+                    print(f"[WebSocket] 服务端正在关闭")
+                elif e.code == 1006:
+                    print(f"[WebSocket] 连接异常断开（网络问题）")
+                else:
+                    print(f"[WebSocket] 连接关闭: code={e.code}, reason={e.reason}")
+                    
+            except ConnectionRefusedError as e:
+                print(f"[WebSocket] 连接被拒绝: {e}")
+                print(f"  - 请检查服务端是否运行在 {self.url}")
+            except asyncio.TimeoutError:
+                print(f"[WebSocket] 连接超时")
+            except OSError as e:
+                # 网络不可达等系统级错误
+                print(f"[WebSocket] 网络错误: {e}")
             except Exception as e:
-                print(f"[WebSocket] 异常: {e}")
+                print(f"[WebSocket] 异常: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
             finally:
                 self.ws = None
                 if self._heartbeat_task:
                     self._heartbeat_task.cancel()
+                    try:
+                        await self._heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
+                    self._heartbeat_task = None
                 
-            # 指数退避重连
+            # 指数退避重连（带抖动）
             if self._running:
-                delay = min(base_delay * (2 ** reconnect_attempts), max_reconnect_delay)
+                self._set_connection_state("reconnecting")
+                self._total_reconnects += 1
+                
+                # 计算延迟：基础延迟 * 2^attempts + 随机抖动
+                base_delay = self.BASE_RECONNECT_DELAY * (2 ** min(reconnect_attempts, 6))  # 限制指数增长
+                jitter = random.uniform(0, self.RECONNECT_JITTER * base_delay)
+                delay = min(base_delay + jitter, self.MAX_RECONNECT_DELAY)
+                
                 reconnect_attempts += 1
-                print(f"将在 {delay} 秒后重连 (第 {reconnect_attempts} 次)")
+                print(f"[WebSocket] 将在 {delay:.1f} 秒后重连 (第 {reconnect_attempts} 次，总计 {self._total_reconnects} 次)")
                 await asyncio.sleep(delay)
                 
     async def _heartbeat_loop(self):
-        """心跳循环"""
+        """应用层心跳循环 - 确保连接活跃"""
+        consecutive_send_failures = 0
+        
         while self._running and self.ws:
             try:
-                await self.ws.send(json.dumps({"type": "heartbeat"}))
-                await asyncio.sleep(30)
-            except Exception:
+                # 发送心跳（带时间戳和序列号）
+                heartbeat_msg = {
+                    "type": "heartbeat",
+                    "timestamp": time.time(),
+                    "session_id": self.session_id,
+                    "ping_count": self._successful_pings + self._failed_pings
+                }
+                await self.ws.send(json.dumps(heartbeat_msg))
+                consecutive_send_failures = 0  # 发送成功，重置计数
+                
+                # 等待心跳间隔
+                await asyncio.sleep(self.HEARTBEAT_INTERVAL)
+                
+                # 检查心跳响应是否超时
+                time_since_last_ack = time.time() - self._last_heartbeat_ack
+                if time_since_last_ack > self.HEARTBEAT_INTERVAL * 2:
+                    self._heartbeat_failures += 1
+                    self._failed_pings += 1
+                    print(f"[WebSocket] 心跳响应超时 ({self._heartbeat_failures}/{self._max_heartbeat_failures})，距上次响应 {time_since_last_ack:.1f}s")
+                    
+                    # 连续失败达到阈值才断开
+                    if self._heartbeat_failures >= self._max_heartbeat_failures:
+                        print("[WebSocket] 心跳失败次数过多，主动断开连接以触发重连")
+                        if self.ws:
+                            try:
+                                await self.ws.close(1000, "Heartbeat timeout")
+                            except Exception:
+                                pass
+                        break
+                        
+            except asyncio.CancelledError:
                 break
+            except websockets.ConnectionClosed:
+                print("[WebSocket] 心跳时连接已关闭")
+                break
+            except Exception as e:
+                consecutive_send_failures += 1
+                print(f"[WebSocket] 心跳发送失败 ({consecutive_send_failures}/3): {e}")
+                
+                # 连续发送失败 3 次，认为连接已断开
+                if consecutive_send_failures >= 3:
+                    print("[WebSocket] 心跳发送连续失败，断开连接")
+                    break
+                    
+                # 短暂等待后重试
+                await asyncio.sleep(2)
     
     async def _handle_command(self, data: dict):
         """
@@ -301,7 +446,24 @@ class WebSocketClient:
     @property
     def is_connected(self) -> bool:
         """检查 WebSocket 是否已连接"""
-        return self.ws is not None and self._running
+        return self.ws is not None and self._running and self._connection_state == "connected"
+    
+    @property
+    def connection_state(self) -> str:
+        """获取当前连接状态"""
+        return self._connection_state
+    
+    def get_connection_stats(self) -> dict:
+        """获取连接统计信息"""
+        return {
+            "state": self._connection_state,
+            "total_reconnects": self._total_reconnects,
+            "successful_pings": self._successful_pings,
+            "failed_pings": self._failed_pings,
+            "heartbeat_failures": self._heartbeat_failures,
+            "last_message_age": time.time() - self._last_message_time if self._last_message_time else None,
+            "last_heartbeat_age": time.time() - self._last_heartbeat_ack if self._last_heartbeat_ack else None,
+        }
 
 
 class AstrBotApiClient:

@@ -289,6 +289,14 @@ class DesktopClientApp(QObject):
                     command, request_id, params
                 )
             
+            # 定义连接状态回调，用于在连接成功后同步配置
+            def on_connection_state(state: str):
+                """连接状态变化回调"""
+                print(f"[DEBUG] WebSocket 连接状态变化: {state}")
+                if state == "connected":
+                    # 连接成功后，异步发送配置同步消息
+                    asyncio.ensure_future(self._sync_config_to_server())
+            
             # 启动 WebSocket 客户端，同时传入消息和命令处理回调
             # 注意：使用配置中的 ws_port 连接独立的 WebSocket 服务器（默认端口 6190）
             print(f"[DEBUG] 启动 WebSocket 连接:")
@@ -303,6 +311,10 @@ class DesktopClientApp(QObject):
                 ws_port=self.config.server.ws_port
             )
             
+            # 设置连接状态回调
+            if self._bridge.api_client.ws_client:
+                self._bridge.api_client.ws_client.on_connection_state = on_connection_state
+            
             print("[DEBUG] WebSocket 连接启动成功，可接收远程命令")
             
         except Exception as e:
@@ -316,6 +328,39 @@ class DesktopClientApp(QObject):
                 5,
                 lambda: asyncio.ensure_future(self._start_websocket_connection())
             )
+    
+    async def _sync_config_to_server(self):
+        """同步客户端配置到服务端
+        
+        在 WebSocket 连接成功后调用，将客户端保存的设置（如 TTS dual_output）
+        发送给服务端，由服务端应用到 AstrBot 核心配置。
+        """
+        try:
+            ws_client = self._bridge.api_client.ws_client
+            if not ws_client or not ws_client.is_connected:
+                print("[WARNING] 无法同步配置：WebSocket 未连接")
+                return
+            
+            # 构建配置同步消息
+            config_sync_data = {
+                "type": "config_sync",
+                "data": {
+                    "voice": {
+                        "enable_tts": self.config.voice.enable_tts,
+                        "auto_play_voice": self.config.voice.auto_play_voice,
+                        "dual_output": self.config.voice.dual_output,
+                    },
+                    # 可以扩展其他需要同步的配置
+                }
+            }
+            
+            await ws_client.send(config_sync_data)
+            print(f"[DEBUG] 配置同步消息已发送: dual_output={self.config.voice.dual_output}")
+            
+        except Exception as e:
+            print(f"[WARNING] 同步配置到服务端失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _on_websocket_message(self, data: dict):
         """处理 WebSocket 消息"""
