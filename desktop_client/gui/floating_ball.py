@@ -2053,8 +2053,9 @@ class FloatingBallWindow(QWidget):
         menu.addSeparator()
 
         restart_action = menu.addAction("重启")
+        restart_action.setIcon(icon_manager.get_icon('restart', c.text_primary, 16))
         restart_action.triggered.connect(self.restart_requested.emit)
-        
+
         settings_action = menu.addAction("设置")
         settings_action.setIcon(icon_manager.get_icon('settings', c.text_primary, 16))
         settings_action.triggered.connect(self.settings_requested.emit)
