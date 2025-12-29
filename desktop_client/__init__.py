@@ -11,7 +11,7 @@ AstrBot 桌面助手独立客户端
 
 使用示例:
     from desktop_client import DesktopAssistantClient
-    
+
     client = DesktopAssistantClient()
     client.run()
 """
@@ -37,11 +37,14 @@ from .bridge import (
     OutputMessage,
 )
 
+
 # 延迟导入应用类（避免循环导入）
 def get_app_class():
     """获取应用主类"""
     from .app import DesktopClientApp
+
     return DesktopClientApp
+
 
 __all__ = [
     # 版本信息

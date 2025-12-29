@@ -10,8 +10,8 @@ from .autostart import (
 )
 
 __all__ = [
-    'is_autostart_enabled',
-    'enable_autostart',
-    'disable_autostart',
-    'set_autostart',
+    "is_autostart_enabled",
+    "enable_autostart",
+    "disable_autostart",
+    "set_autostart",
 ]

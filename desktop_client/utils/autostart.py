@@ -7,13 +7,13 @@
 
 from typing import Tuple
 
-from ..platforms import get_platform_adapter, Result
+from ..platforms import get_platform_adapter
 
 
 def is_autostart_enabled() -> bool:
     """
     检查是否已启用开机自启
-    
+
     Returns:
         bool: 是否已启用
     """
@@ -24,7 +24,7 @@ def is_autostart_enabled() -> bool:
 def enable_autostart() -> Tuple[bool, str]:
     """
     启用开机自启
-    
+
     Returns:
         Tuple[bool, str]: (是否成功, 消息)
     """
@@ -36,7 +36,7 @@ def enable_autostart() -> Tuple[bool, str]:
 def disable_autostart() -> Tuple[bool, str]:
     """
     禁用开机自启
-    
+
     Returns:
         Tuple[bool, str]: (是否成功, 消息)
     """
@@ -48,10 +48,10 @@ def disable_autostart() -> Tuple[bool, str]:
 def set_autostart(enabled: bool) -> Tuple[bool, str]:
     """
     设置开机自启状态
-    
+
     Args:
         enabled: 是否启用
-        
+
     Returns:
         Tuple[bool, str]: (是否成功, 消息)
     """

@@ -7,4 +7,4 @@
 from .variables import QSSVariableProcessor
 from .loader import QSSThemeLoader
 
-__all__ = ['QSSVariableProcessor', 'QSSThemeLoader']
+__all__ = ["QSSVariableProcessor", "QSSThemeLoader"]

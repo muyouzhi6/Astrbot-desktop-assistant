@@ -5,8 +5,11 @@ QSS 主题加载器
 """
 
 from pathlib import Path
+import logging
 from typing import Optional, Dict
 from .variables import QSSVariableProcessor
+
+logger = logging.getLogger(__name__)
 
 
 class QSSThemeLoader:
@@ -17,7 +20,9 @@ class QSSThemeLoader:
         self.themes_dir = Path(__file__).parent / "presets"
         self.base_qss_path = Path(__file__).parent / "base.qss"
 
-    def load_theme(self, theme_name: str, color_overrides: Optional[Dict[str, str]] = None) -> str:
+    def load_theme(
+        self, theme_name: str, color_overrides: Optional[Dict[str, str]] = None
+    ) -> str:
         """加载主题
 
         Args:
@@ -55,10 +60,10 @@ class QSSThemeLoader:
             return ""
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
-            print(f"[WARNING] 加载 QSS 文件失败: {file_path}, 错误: {e}")
+            logger.warning(f"加载 QSS 文件失败: {file_path}, 错误: {e}")
             return ""
 
     def get_available_themes(self) -> list:

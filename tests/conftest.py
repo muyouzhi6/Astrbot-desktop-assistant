@@ -5,12 +5,9 @@ pytest 配置和共享 fixtures
 """
 
 import asyncio
-import json
-import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,15 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from desktop_client.config import (
     ClientConfig,
-    ServerConfig,
-    AppearanceConfig,
-    ChatWindowConfig,
-    HotkeyConfigData,
-    InteractionConfig,
-    VoiceConfig,
-    StorageConfig,
-    ProactiveDialogConfig,
-    CustomThemeConfig,
 )
 from desktop_client.api_client import (
     AstrBotApiClient,
@@ -38,7 +26,6 @@ from desktop_client.api_client import (
 from desktop_client.platforms.base import (
     IPlatformAdapter,
     Result,
-    ResultStatus,
     WindowInfo,
     AppInfo,
 )
@@ -188,7 +175,7 @@ def mock_api_client() -> MagicMock:
     client.server_url = "http://localhost:6185"
     client.username = "test_user"
     client.password = "test_password"
-    
+
     # Mock 异步方法
     client.login = AsyncMock(return_value=(True, "登录成功"))
     client.check_connection = AsyncMock(return_value=True)
@@ -197,7 +184,7 @@ def mock_api_client() -> MagicMock:
     client.close = AsyncMock()
     client.start_health_check = AsyncMock()
     client.stop_health_check = AsyncMock()
-    
+
     return client
 
 
@@ -236,7 +223,7 @@ def sample_sse_events() -> list[SSEEvent]:
 
 class MockPlatformAdapter(IPlatformAdapter):
     """Mock 平台适配器实现"""
-    
+
     def __init__(self):
         self._autostart_enabled = False
         self._active_window = WindowInfo(
@@ -248,25 +235,25 @@ class MockPlatformAdapter(IPlatformAdapter):
             AppInfo(pid=1234, name="test.exe"),
             AppInfo(pid=5678, name="browser.exe"),
         ]
-    
+
     @property
     def platform_name(self) -> str:
         return "mock"
-    
+
     def get_active_window(self) -> WindowInfo:
         return self._active_window
-    
+
     def get_running_apps(self, max_count: int = 50) -> list[AppInfo]:
         return self._running_apps[:max_count]
-    
+
     def enable_autostart(self) -> Result:
         self._autostart_enabled = True
         return Result.success("已启用开机自启")
-    
+
     def disable_autostart(self) -> Result:
         self._autostart_enabled = False
         return Result.success("已禁用开机自启")
-    
+
     def is_autostart_enabled(self) -> bool:
         return self._autostart_enabled
 
@@ -296,17 +283,77 @@ def temp_image_file(tmp_path: Path) -> Path:
     """创建临时图片文件"""
     image_file = tmp_path / "test_image.png"
     # 创建一个最小的有效 PNG 文件（1x1 透明像素）
-    png_data = bytes([
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
-        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
-        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # 1x1
-        0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-        0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,  # IDAT chunk
-        0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-        0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
-        0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,  # IEND chunk
-        0x42, 0x60, 0x82,
-    ])
+    png_data = bytes(
+        [
+            0x89,
+            0x50,
+            0x4E,
+            0x47,
+            0x0D,
+            0x0A,
+            0x1A,
+            0x0A,  # PNG signature
+            0x00,
+            0x00,
+            0x00,
+            0x0D,
+            0x49,
+            0x48,
+            0x44,
+            0x52,  # IHDR chunk
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x01,  # 1x1
+            0x08,
+            0x06,
+            0x00,
+            0x00,
+            0x00,
+            0x1F,
+            0x15,
+            0xC4,
+            0x89,
+            0x00,
+            0x00,
+            0x00,
+            0x0A,
+            0x49,
+            0x44,
+            0x41,  # IDAT chunk
+            0x54,
+            0x78,
+            0x9C,
+            0x63,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x05,
+            0x00,
+            0x01,
+            0x0D,
+            0x0A,
+            0x2D,
+            0xB4,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x49,
+            0x45,
+            0x4E,
+            0x44,
+            0xAE,  # IEND chunk
+            0x42,
+            0x60,
+            0x82,
+        ]
+    )
     image_file.write_bytes(png_data)
     return image_file
 
@@ -316,21 +363,54 @@ def temp_audio_file(tmp_path: Path) -> Path:
     """创建临时音频文件"""
     audio_file = tmp_path / "test_audio.wav"
     # 创建一个最小的有效 WAV 文件
-    wav_data = bytes([
-        0x52, 0x49, 0x46, 0x46,  # "RIFF"
-        0x24, 0x00, 0x00, 0x00,  # File size - 8
-        0x57, 0x41, 0x56, 0x45,  # "WAVE"
-        0x66, 0x6D, 0x74, 0x20,  # "fmt "
-        0x10, 0x00, 0x00, 0x00,  # Chunk size
-        0x01, 0x00,              # Audio format (PCM)
-        0x01, 0x00,              # Num channels
-        0x44, 0xAC, 0x00, 0x00,  # Sample rate (44100)
-        0x88, 0x58, 0x01, 0x00,  # Byte rate
-        0x02, 0x00,              # Block align
-        0x10, 0x00,              # Bits per sample
-        0x64, 0x61, 0x74, 0x61,  # "data"
-        0x00, 0x00, 0x00, 0x00,  # Data size
-    ])
+    wav_data = bytes(
+        [
+            0x52,
+            0x49,
+            0x46,
+            0x46,  # "RIFF"
+            0x24,
+            0x00,
+            0x00,
+            0x00,  # File size - 8
+            0x57,
+            0x41,
+            0x56,
+            0x45,  # "WAVE"
+            0x66,
+            0x6D,
+            0x74,
+            0x20,  # "fmt "
+            0x10,
+            0x00,
+            0x00,
+            0x00,  # Chunk size
+            0x01,
+            0x00,  # Audio format (PCM)
+            0x01,
+            0x00,  # Num channels
+            0x44,
+            0xAC,
+            0x00,
+            0x00,  # Sample rate (44100)
+            0x88,
+            0x58,
+            0x01,
+            0x00,  # Byte rate
+            0x02,
+            0x00,  # Block align
+            0x10,
+            0x00,  # Bits per sample
+            0x64,
+            0x61,
+            0x74,
+            0x61,  # "data"
+            0x00,
+            0x00,
+            0x00,
+            0x00,  # Data size
+        ]
+    )
     audio_file.write_bytes(wav_data)
     return audio_file
 

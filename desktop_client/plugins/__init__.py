@@ -8,13 +8,13 @@
 
 使用示例:
     from desktop_client.plugins import IPlugin, PluginManager, HookType
-    
+
     # 创建自定义插件
     class MyPlugin(IPlugin):
         @property
         def name(self) -> str:
             return "my_plugin"
-        
+
         def on_load(self) -> bool:
             print("插件加载")
             return True

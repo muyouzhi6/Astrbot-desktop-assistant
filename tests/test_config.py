@@ -12,7 +12,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -37,12 +36,12 @@ from desktop_client.config import (
 
 class TestServerConfig:
     """ServerConfig 测试"""
-    
+
     @pytest.mark.unit
     def test_default_values(self):
         """测试默认值"""
         config = ServerConfig()
-        
+
         assert config.url == "http://localhost:6185"
         assert config.username == "astrbot"
         assert config.password == ""
@@ -53,7 +52,7 @@ class TestServerConfig:
         assert config.max_reconnect_attempts == 0
         assert config.request_timeout == 30
         assert config.enable_streaming is True
-    
+
     @pytest.mark.unit
     def test_custom_values(self):
         """测试自定义值"""
@@ -65,7 +64,7 @@ class TestServerConfig:
             auto_reconnect=False,
             reconnect_interval=10,
         )
-        
+
         assert config.url == "http://custom:8080"
         assert config.username == "custom_user"
         assert config.password == "custom_pass"
@@ -76,12 +75,12 @@ class TestServerConfig:
 
 class TestAppearanceConfig:
     """AppearanceConfig 测试"""
-    
+
     @pytest.mark.unit
     def test_default_values(self):
         """测试默认值"""
         config = AppearanceConfig()
-        
+
         assert config.ball_size == 64
         assert config.ball_opacity == 0.9
         assert config.avatar_path == ""
@@ -92,12 +91,12 @@ class TestAppearanceConfig:
         assert config.breathing_enabled is True
         assert config.auto_start is False
         assert isinstance(config.custom_theme, CustomThemeConfig)
-    
+
     @pytest.mark.unit
     def test_custom_theme_defaults(self):
         """测试自定义主题默认值"""
         config = AppearanceConfig()
-        
+
         assert config.custom_theme.enabled is False
         assert config.custom_theme.primary == ""
         assert config.custom_theme.bg_primary == ""
@@ -106,12 +105,12 @@ class TestAppearanceConfig:
 
 class TestChatWindowConfig:
     """ChatWindowConfig 测试"""
-    
+
     @pytest.mark.unit
     def test_default_values(self):
         """测试默认值"""
         config = ChatWindowConfig()
-        
+
         assert config.window_width == 400
         assert config.window_height == 600
         assert config.font_size == 14
@@ -120,47 +119,47 @@ class TestChatWindowConfig:
 
 class TestStorageConfig:
     """StorageConfig 测试"""
-    
+
     @pytest.mark.unit
     def test_default_values(self):
         """测试默认值"""
         config = StorageConfig()
-        
+
         assert config.image_save_path == ""
         assert config.chat_history_path == ""
-    
+
     @pytest.mark.unit
     def test_resolved_image_save_path_default(self, tmp_path: Path, monkeypatch):
         """测试默认图片保存路径解析"""
         # 切换到临时目录
         monkeypatch.chdir(tmp_path)
-        
+
         config = StorageConfig()
         resolved = config.resolved_image_save_path
-        
+
         assert resolved.exists()
         assert "images" in str(resolved)
-    
+
     @pytest.mark.unit
     def test_resolved_image_save_path_custom(self, tmp_path: Path):
         """测试自定义图片保存路径解析"""
         custom_path = tmp_path / "custom_images"
         config = StorageConfig(image_save_path=str(custom_path))
-        
+
         resolved = config.resolved_image_save_path
-        
+
         assert resolved == custom_path
         assert resolved.exists()
 
 
 class TestProactiveDialogConfig:
     """ProactiveDialogConfig 测试"""
-    
+
     @pytest.mark.unit
     def test_default_values(self):
         """测试默认值"""
         config = ProactiveDialogConfig()
-        
+
         assert config.enabled is False
         assert config.check_interval == 600
         assert config.trigger_probability == 0.2
@@ -177,7 +176,7 @@ class TestProactiveDialogConfig:
 
 class TestClientConfig:
     """ClientConfig 完整测试"""
-    
+
     @pytest.mark.unit
     def test_default_initialization(self, default_config: ClientConfig):
         """测试默认初始化"""
@@ -190,7 +189,7 @@ class TestClientConfig:
         assert isinstance(default_config.proactive, ProactiveDialogConfig)
         assert isinstance(default_config.storage, StorageConfig)
         assert default_config.session_id is None
-    
+
     @pytest.mark.unit
     def test_save_and_load(self, sample_config: ClientConfig, temp_config_file: Path):
         """测试保存和加载配置"""
@@ -198,10 +197,10 @@ class TestClientConfig:
         result = sample_config.save(str(temp_config_file))
         assert result is True
         assert temp_config_file.exists()
-        
+
         # 加载配置
         loaded = ClientConfig.load(str(temp_config_file))
-        
+
         # 验证加载的值
         assert loaded.server.url == sample_config.server.url
         assert loaded.server.username == sample_config.server.username
@@ -210,33 +209,35 @@ class TestClientConfig:
         assert loaded.appearance.theme == sample_config.appearance.theme
         assert loaded.chat_window.font_size == sample_config.chat_window.font_size
         assert loaded.session_id == sample_config.session_id
-    
+
     @pytest.mark.unit
     def test_load_nonexistent_file(self, tmp_path: Path):
         """测试加载不存在的文件（应返回默认配置）"""
         nonexistent = tmp_path / "nonexistent.json"
-        
+
         config = ClientConfig.load(str(nonexistent))
-        
+
         # 应该返回默认配置
         assert config.server.url == "http://localhost:6185"
         assert config.server.username == "astrbot"
-    
+
     @pytest.mark.unit
     def test_load_from_dict(self, sample_config_dict: dict, temp_config_file: Path):
         """测试从字典加载配置"""
         # 写入配置文件
-        with open(temp_config_file, 'w', encoding='utf-8') as f:
+        with open(temp_config_file, "w", encoding="utf-8") as f:
             json.dump(sample_config_dict, f)
-        
+
         # 加载
         config = ClientConfig.load(str(temp_config_file))
-        
+
         assert config.server.url == sample_config_dict["server"]["url"]
         assert config.server.username == sample_config_dict["server"]["username"]
-        assert config.appearance.ball_size == sample_config_dict["appearance"]["ball_size"]
+        assert (
+            config.appearance.ball_size == sample_config_dict["appearance"]["ball_size"]
+        )
         assert config.session_id == sample_config_dict["session_id"]
-    
+
     @pytest.mark.unit
     def test_load_partial_config(self, temp_config_file: Path):
         """测试加载部分配置（缺失字段应使用默认值）"""
@@ -248,32 +249,32 @@ class TestClientConfig:
                 "theme": "dark",
             },
         }
-        
-        with open(temp_config_file, 'w', encoding='utf-8') as f:
+
+        with open(temp_config_file, "w", encoding="utf-8") as f:
             json.dump(partial_config, f)
-        
+
         config = ClientConfig.load(str(temp_config_file))
-        
+
         # 指定的值
         assert config.server.url == "http://partial:8080"
         assert config.appearance.theme == "dark"
-        
+
         # 默认值
         assert config.server.username == "astrbot"  # 默认值
         assert config.appearance.ball_size == 64  # 默认值
         assert config.session_id is None  # 默认值
-    
+
     @pytest.mark.unit
     def test_to_legacy_dict(self, sample_config: ClientConfig):
         """测试转换为旧版字典格式"""
         legacy = sample_config.to_legacy_dict()
-        
+
         assert legacy["server_url"] == sample_config.server.url
         assert legacy["username"] == sample_config.server.username
         assert legacy["ball_size"] == sample_config.appearance.ball_size
         assert legacy["theme"] == sample_config.appearance.theme
         assert legacy["font_size"] == sample_config.chat_window.font_size
-    
+
     @pytest.mark.unit
     def test_update_from_legacy_dict(self, default_config: ClientConfig):
         """测试从旧版字典更新配置"""
@@ -285,16 +286,16 @@ class TestClientConfig:
             "theme": "light",
             "font_size": 18,
         }
-        
+
         default_config.update_from_legacy_dict(legacy)
-        
+
         assert default_config.server.url == "http://legacy:9999"
         assert default_config.server.username == "legacy_user"
         assert default_config.server.password == "legacy_pass"
         assert default_config.appearance.ball_size == 100
         assert default_config.appearance.theme == "light"
         assert default_config.chat_window.font_size == 18
-    
+
     @pytest.mark.unit
     def test_custom_theme_serialization(self, temp_config_file: Path):
         """测试自定义主题序列化"""
@@ -302,127 +303,131 @@ class TestClientConfig:
         config.appearance.custom_theme.enabled = True
         config.appearance.custom_theme.primary = "#FF5722"
         config.appearance.custom_theme.bg_primary = "#1E1E1E"
-        
+
         # 保存
         config.save(str(temp_config_file))
-        
+
         # 加载
         loaded = ClientConfig.load(str(temp_config_file))
-        
+
         assert loaded.appearance.custom_theme.enabled is True
         assert loaded.appearance.custom_theme.primary == "#FF5722"
         assert loaded.appearance.custom_theme.bg_primary == "#1E1E1E"
-    
+
     @pytest.mark.unit
     def test_thread_safety(self, sample_config: ClientConfig, temp_config_file: Path):
         """测试线程安全（锁的存在性）"""
         # 确保配置有锁
-        assert hasattr(sample_config, '_lock')
-        
+        assert hasattr(sample_config, "_lock")
+
         # 保存应该成功（不会死锁）
         result = sample_config.save(str(temp_config_file))
         assert result is True
-    
+
     @pytest.mark.unit
     def test_config_dir_creation(self, tmp_path: Path, monkeypatch):
         """测试配置目录创建"""
         # Mock 环境变量
-        if os.name == 'nt':
+        if os.name == "nt":
             monkeypatch.setenv("APPDATA", str(tmp_path))
         else:
             monkeypatch.setenv("HOME", str(tmp_path))
-        
+
         config_dir = ClientConfig.get_config_dir()
-        
+
         assert config_dir.exists()
         assert config_dir.is_dir()
 
 
 class TestConfigHelperFunctions:
     """配置辅助函数测试"""
-    
+
     @pytest.mark.unit
-    def test_load_config_function(self, temp_config_file: Path, sample_config_dict: dict):
+    def test_load_config_function(
+        self, temp_config_file: Path, sample_config_dict: dict
+    ):
         """测试 load_config 函数"""
-        with open(temp_config_file, 'w', encoding='utf-8') as f:
+        with open(temp_config_file, "w", encoding="utf-8") as f:
             json.dump(sample_config_dict, f)
-        
+
         config = load_config(str(temp_config_file))
-        
+
         assert isinstance(config, ClientConfig)
         assert config.server.url == sample_config_dict["server"]["url"]
-    
+
     @pytest.mark.unit
-    def test_save_config_function(self, sample_config: ClientConfig, temp_config_file: Path):
+    def test_save_config_function(
+        self, sample_config: ClientConfig, temp_config_file: Path
+    ):
         """测试 save_config 函数"""
         result = save_config(sample_config, str(temp_config_file))
-        
+
         assert result is True
         assert temp_config_file.exists()
-        
+
         # 验证内容
-        with open(temp_config_file, 'r', encoding='utf-8') as f:
+        with open(temp_config_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        
+
         assert data["server"]["url"] == sample_config.server.url
 
 
 class TestConfigEdgeCases:
     """配置边界情况测试"""
-    
+
     @pytest.mark.unit
     def test_load_corrupted_json(self, temp_config_file: Path):
         """测试加载损坏的 JSON 文件"""
-        with open(temp_config_file, 'w', encoding='utf-8') as f:
+        with open(temp_config_file, "w", encoding="utf-8") as f:
             f.write("{ invalid json }")
-        
+
         # 应该返回默认配置而不是崩溃
         config = ClientConfig.load(str(temp_config_file))
-        
+
         assert config.server.url == "http://localhost:6185"
-    
+
     @pytest.mark.unit
     def test_load_empty_file(self, temp_config_file: Path):
         """测试加载空文件"""
         temp_config_file.touch()
-        
+
         config = ClientConfig.load(str(temp_config_file))
-        
+
         assert config.server.url == "http://localhost:6185"
-    
+
     @pytest.mark.unit
     def test_save_to_readonly_location(self, tmp_path: Path):
         """测试保存到只读位置（应该失败但不崩溃）"""
         # 创建只读目录在 Windows 上比较复杂，这里简化测试
         # 测试保存到不存在的深层目录
         config = ClientConfig()
-        
+
         # 这个路径可能无法写入（取决于权限）
         # 但函数应该返回 False 而不是抛出异常
         result = config.save("/nonexistent/deep/path/config.json")
-        
+
         # 在大多数系统上这应该失败
         # 但重要的是不崩溃
         assert isinstance(result, bool)
-    
+
     @pytest.mark.unit
     def test_unicode_in_config(self, temp_config_file: Path):
         """测试配置中的 Unicode 字符"""
         config = ClientConfig()
         config.proactive.prompt_template = "你好，这是中文测试 🎉"
-        
+
         config.save(str(temp_config_file))
         loaded = ClientConfig.load(str(temp_config_file))
-        
+
         assert loaded.proactive.prompt_template == "你好，这是中文测试 🎉"
-    
+
     @pytest.mark.unit
     def test_special_characters_in_password(self, temp_config_file: Path):
         """测试密码中的特殊字符"""
         config = ClientConfig()
-        config.server.password = "p@$$w0rd!#%^&*(){}[]|\\:\";<>,.?/"
-        
+        config.server.password = 'p@$$w0rd!#%^&*(){}[]|\\:";<>,.?/'
+
         config.save(str(temp_config_file))
         loaded = ClientConfig.load(str(temp_config_file))
-        
+
         assert loaded.server.password == config.server.password

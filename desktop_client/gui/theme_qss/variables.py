@@ -35,7 +35,7 @@ class QSSVariableProcessor:
             处理后的 QSS 内容
         """
         # 1. 提取变量定义
-        var_pattern = r'@([\w-]+)\s*:\s*([^;]+);'
+        var_pattern = r"@([\w-]+)\s*:\s*([^;]+);"
         for match in re.finditer(var_pattern, qss_content):
             var_name, var_value = match.groups()
             self.variables[var_name] = var_value.strip()
@@ -49,19 +49,19 @@ class QSSVariableProcessor:
             var_name = match.group(1)
             return self.variables.get(var_name, match.group(0))
 
-        result = re.sub(r'@([\w-]+)', replace_var, qss_content)
+        result = re.sub(r"@([\w-]+)", replace_var, qss_content)
 
         # 4. 移除变量定义行
-        result = re.sub(var_pattern, '', result)
+        result = re.sub(var_pattern, "", result)
 
         # 5. 清理多余空行
-        result = re.sub(r'\n\s*\n\s*\n', '\n\n', result)
+        result = re.sub(r"\n\s*\n\s*\n", "\n\n", result)
 
         return result.strip()
 
     def get_variable(self, name: str) -> str:
         """获取变量值"""
-        return self.variables.get(name, '')
+        return self.variables.get(name, "")
 
     def set_variable(self, name: str, value: str):
         """设置变量值"""

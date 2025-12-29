@@ -15,6 +15,7 @@ from pathlib import Path
 @dataclass
 class ServerConfig:
     """服务器连接配置"""
+
     url: str = "http://localhost:6185"
     username: str = "astrbot"
     password: str = ""
@@ -36,15 +37,16 @@ class ServerConfig:
     # [已废弃] WebSocket 服务端口。默认为 6190，表示复用 API 端口 (统一端口模式)。
     # 如果设置为其他值，将尝试连接该特定端口 (兼容旧版插件)。
     ws_port: int = 6190
-    
+
 
 @dataclass
 class CustomThemeConfig:
     """自定义主题颜色配置
-    
+
     所有颜色字段默认为空字符串，表示使用当前主题的默认颜色。
     颜色值格式为十六进制，如 "#FF5722" 或 "rgba(255, 87, 34, 0.8)"
     """
+
     # 是否启用自定义颜色
     enabled: bool = False
     # 主色调
@@ -74,6 +76,7 @@ class CustomThemeConfig:
 @dataclass
 class AppearanceConfig:
     """外观配置"""
+
     ball_size: int = 64
     ball_opacity: float = 0.9
     avatar_path: str = ""  # 悬浮球头像（向后兼容，同时作为bot头像）
@@ -85,20 +88,22 @@ class AppearanceConfig:
     auto_start: bool = False  # 开机自启
     # 自定义主题颜色
     custom_theme: CustomThemeConfig = field(default_factory=CustomThemeConfig)
-    
+
 
 @dataclass
 class ChatWindowConfig:
     """对话窗口配置"""
+
     window_width: int = 400
     window_height: int = 600
     font_size: int = 14
     show_timestamp: bool = True
-    
+
 
 @dataclass
 class HotkeyConfigData:
     """快捷键配置"""
+
     toggle_chat: str = "Ctrl+Shift+A"
     region_screenshot: str = "Ctrl+Shift+S"
     full_screenshot: str = "Ctrl+Shift+F"
@@ -111,6 +116,7 @@ class HotkeyConfigData:
 @dataclass
 class InteractionConfig:
     """交互配置"""
+
     default_mode: str = "window"  # bubble | window
     single_click: str = "bubble"  # bubble | window | none
     double_click: str = "window"  # bubble | window | none
@@ -122,6 +128,7 @@ class InteractionConfig:
 @dataclass
 class VoiceConfig:
     """语音配置"""
+
     enable_tts: bool = True
     auto_play_voice: bool = False
     # TTS 文字语音同时输出（对应 AstrBot 的 provider_tts_settings.dual_output）
@@ -134,43 +141,45 @@ _cached_config_dir: Optional[Path] = None
 
 def _get_config_dir_internal() -> Path:
     """获取配置目录的内部实现函数
-    
+
     供 StorageConfig 使用，避免循环引用。
     使用缓存避免重复的目录检测和创建操作。
     """
     global _cached_config_dir
-    
+
     if _cached_config_dir is not None:
         return _cached_config_dir
-    
+
     import sys
-    
+
     config_dir = None
     fallback_dir = None
-    
+
     # 计算回退目录（项目目录下的 config 文件夹）
     try:
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             project_root = Path(sys.executable).parent
         else:
             project_root = Path(__file__).parent.parent
-        fallback_dir = project_root / 'config'
+        fallback_dir = project_root / "config"
     except Exception:
-        fallback_dir = Path.cwd() / 'config'
-    
+        fallback_dir = Path.cwd() / "config"
+
     # 根据操作系统确定首选配置目录
-    if os.name == 'nt':
-        base = os.environ.get('APPDATA', os.path.expanduser('~'))
-        config_dir = Path(base) / 'AstrBotDesktopClient'
-    elif sys.platform == 'darwin':
-        config_dir = Path.home() / 'Library' / 'Application Support' / 'AstrBotDesktopClient'
+    if os.name == "nt":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+        config_dir = Path(base) / "AstrBotDesktopClient"
+    elif sys.platform == "darwin":
+        config_dir = (
+            Path.home() / "Library" / "Application Support" / "AstrBotDesktopClient"
+        )
     else:
-        config_dir = Path.home() / '.config' / 'astrbot-desktop-client'
-    
+        config_dir = Path.home() / ".config" / "astrbot-desktop-client"
+
     # 尝试创建首选目录
     try:
         config_dir.mkdir(parents=True, exist_ok=True)
-        test_file = config_dir / '.write_test'
+        test_file = config_dir / ".write_test"
         test_file.touch()
         test_file.unlink()
         _cached_config_dir = config_dir
@@ -181,7 +190,7 @@ def _get_config_dir_internal() -> Path:
             _cached_config_dir = fallback_dir
             return fallback_dir
         except Exception:
-            cwd_config = Path.cwd() / 'config'
+            cwd_config = Path.cwd() / "config"
             cwd_config.mkdir(parents=True, exist_ok=True)
             _cached_config_dir = cwd_config
             return cwd_config
@@ -190,11 +199,12 @@ def _get_config_dir_internal() -> Path:
 @dataclass
 class StorageConfig:
     """存储配置"""
+
     # 图片/截图保存路径
     image_save_path: str = ""
     # 聊天记录保存路径
     chat_history_path: str = ""
-    
+
     @property
     def resolved_image_save_path(self) -> Path:
         """获取解析后的图片保存路径"""
@@ -205,12 +215,12 @@ class StorageConfig:
                 return path
             except Exception as e:
                 print(f"无法创建自定义存储目录: {e}")
-        
+
         # 默认路径: ./temp/images
         default_path = Path("temp") / "images"
         default_path.mkdir(parents=True, exist_ok=True)
         return default_path
-    
+
     @property
     def resolved_chat_history_path(self) -> Path:
         """获取解析后的聊天记录保存路径"""
@@ -221,16 +231,17 @@ class StorageConfig:
                 return path
             except Exception as e:
                 print(f"无法创建聊天记录目录: {e}")
-        
+
         # 默认路径: 配置目录下的 chat_history.json
         # 使用与 ClientConfig.get_config_dir() 相同的逻辑获取配置目录
         config_dir = _get_config_dir_internal()
-        return config_dir / 'chat_history.json'
+        return config_dir / "chat_history.json"
 
 
 @dataclass
 class ProactiveDialogConfig:
     """主动对话配置"""
+
     # 是否启用主动对话
     enabled: bool = False
     # 检测间隔（秒），默认10分钟
@@ -265,6 +276,7 @@ class ProactiveDialogConfig:
 @dataclass
 class UpdateConfig:
     """更新配置"""
+
     # 是否启用自动更新
     enabled: bool = False
     # 启动时检查更新
@@ -285,11 +297,12 @@ class UpdateConfig:
     latest_release_version: str = ""
     # 最新已知的 Release 下载地址
     latest_release_url: str = ""
-    
+
 
 @dataclass
 class ClientConfig:
     """客户端完整配置"""
+
     server: ServerConfig = field(default_factory=ServerConfig)
     appearance: AppearanceConfig = field(default_factory=AppearanceConfig)
     chat_window: ChatWindowConfig = field(default_factory=ChatWindowConfig)
@@ -301,144 +314,161 @@ class ClientConfig:
     update: UpdateConfig = field(default_factory=UpdateConfig)
     # 会话 ID
     session_id: Optional[str] = None
-    
+
     # 线程锁
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
-    
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
+
     def __post_init__(self):
         # 确保反序列化后锁存在
-        if not hasattr(self, '_lock'):
-            object.__setattr__(self, '_lock', threading.Lock())
+        if not hasattr(self, "_lock"):
+            object.__setattr__(self, "_lock", threading.Lock())
 
     @classmethod
     def get_config_dir(cls) -> Path:
         """获取配置文件目录
-        
+
         优先级：
         - Windows: %APPDATA%/AstrBotDesktopClient
         - macOS: ~/Library/Application Support/AstrBotDesktopClient
         - Linux: ~/.config/astrbot-desktop-client
-        
+
         如果创建失败，回退到项目目录下的 config 文件夹
-        
+
         注意：复用 _get_config_dir_internal() 避免代码重复
         """
         return _get_config_dir_internal()
-    
+
     @classmethod
     def get_config_path(cls) -> Path:
         """获取配置文件路径"""
-        return cls.get_config_dir() / 'config.json'
-    
+        return cls.get_config_dir() / "config.json"
+
     @classmethod
-    def load(cls, config_path: Optional[str] = None) -> 'ClientConfig':
+    def load(cls, config_path: Optional[str] = None) -> "ClientConfig":
         """从文件加载配置"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         if config_path:
             path = Path(config_path)
         else:
             path = cls.get_config_path()
-        
-        print(f"[DEBUG] 尝试加载配置文件: {path}")
+
+        logger.debug(f"尝试加载配置文件: {path}")
 
         if not path.exists():
-            print(f"[DEBUG] 配置文件不存在，创建默认配置文件: {path}")
+            logger.debug(f"配置文件不存在，创建默认配置文件: {path}")
             # 创建默认配置并保存
             default_config = cls()
             # 确保配置目录存在
             path.parent.mkdir(parents=True, exist_ok=True)
             # 保存默认配置到文件
             if default_config.save(str(path)):
-                print(f"[DEBUG] 默认配置文件已创建: {path}")
+                logger.debug(f"默认配置文件已创建: {path}")
             else:
-                print(f"[WARNING] 无法创建默认配置文件: {path}")
+                logger.warning(f"无法创建默认配置文件: {path}")
             return default_config
-        
+
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
-            print(f"[DEBUG] 成功读取配置文件，内容: {json.dumps(data.get('server', {}), ensure_ascii=False)}")
-            
+
+            logger.debug(
+                f"成功读取配置文件，内容: {json.dumps(data.get('server', {}), ensure_ascii=False)}"
+            )
+
             config = cls()
-            
+
             # 加载服务器配置
-            if 'server' in data:
-                for key, value in data['server'].items():
+            if "server" in data:
+                for key, value in data["server"].items():
                     if hasattr(config.server, key):
                         setattr(config.server, key, value)
-            
+
             # 加载外观配置
-            if 'appearance' in data:
-                for key, value in data['appearance'].items():
-                    if key == 'custom_theme' and isinstance(value, dict):
+            if "appearance" in data:
+                for key, value in data["appearance"].items():
+                    if key == "custom_theme" and isinstance(value, dict):
                         # 特殊处理嵌套的 custom_theme 配置
                         for ct_key, ct_value in value.items():
                             if hasattr(config.appearance.custom_theme, ct_key):
-                                setattr(config.appearance.custom_theme, ct_key, ct_value)
+                                setattr(
+                                    config.appearance.custom_theme, ct_key, ct_value
+                                )
                     elif hasattr(config.appearance, key):
                         setattr(config.appearance, key, value)
-            
+
             # 加载对话窗口配置
-            if 'chat_window' in data:
-                for key, value in data['chat_window'].items():
+            if "chat_window" in data:
+                for key, value in data["chat_window"].items():
                     if hasattr(config.chat_window, key):
                         setattr(config.chat_window, key, value)
-            
+
             # 加载语音配置
-            if 'voice' in data:
-                for key, value in data['voice'].items():
+            if "voice" in data:
+                for key, value in data["voice"].items():
                     if hasattr(config.voice, key):
                         setattr(config.voice, key, value)
-            
+
             # 加载快捷键配置
-            if 'hotkeys' in data:
-                for key, value in data['hotkeys'].items():
+            if "hotkeys" in data:
+                for key, value in data["hotkeys"].items():
                     if hasattr(config.hotkeys, key):
                         setattr(config.hotkeys, key, value)
-            
+
             # 加载交互配置
-            if 'interaction' in data:
-                for key, value in data['interaction'].items():
+            if "interaction" in data:
+                for key, value in data["interaction"].items():
                     if hasattr(config.interaction, key):
                         setattr(config.interaction, key, value)
-            
+
             # 加载主动对话配置
-            if 'proactive' in data:
-                for key, value in data['proactive'].items():
+            if "proactive" in data:
+                for key, value in data["proactive"].items():
                     if hasattr(config.proactive, key):
                         setattr(config.proactive, key, value)
-            
+
             # 加载存储配置
-            if 'storage' in data:
-                for key, value in data['storage'].items():
+            if "storage" in data:
+                for key, value in data["storage"].items():
                     if hasattr(config.storage, key):
                         setattr(config.storage, key, value)
 
             # 加载更新配置
-            if 'update' in data:
-                for key, value in data['update'].items():
+            if "update" in data:
+                for key, value in data["update"].items():
                     if hasattr(config.update, key):
                         setattr(config.update, key, value)
 
             # 加载会话 ID
-            config.session_id = data.get('session_id')
-            
-            print(f"[DEBUG] 配置加载完成: server.url={config.server.url}, server.username={config.server.username}")
-            
+            config.session_id = data.get("session_id")
+
+            logger.debug(
+                f"配置加载完成: server.url={config.server.url}, server.username={config.server.username}"
+            )
+
             return config
-            
+
         except Exception as e:
             import traceback
-            print(f"加载配置失败: {e}")
+
+            logger.error(f"加载配置失败: {e}")
             traceback.print_exc()
             return cls()
-    
+
     def save(self, config_path: Optional[str] = None) -> bool:
         """保存配置到文件"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         # 确保锁存在 (处理从 dict 加载的情况)
-        if not hasattr(self, '_lock'):
-            object.__setattr__(self, '_lock', threading.Lock())
-            
+        if not hasattr(self, "_lock"):
+            object.__setattr__(self, "_lock", threading.Lock())
+
         with self._lock:
             if config_path:
                 path = Path(config_path)
@@ -446,103 +476,104 @@ class ClientConfig:
                 # 确保配置目录存在
                 self.get_config_dir()  # 这会创建目录
                 path = self.get_config_path()
-            
+
             try:
                 # 确保父目录存在
                 path.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 # 构建外观配置，包含嵌套的 custom_theme
                 appearance_data = asdict(self.appearance)
                 # custom_theme 已经被 asdict 正确序列化为嵌套字典
-                
+
                 data = {
-                    'server': asdict(self.server),
-                    'appearance': appearance_data,
-                    'chat_window': asdict(self.chat_window),
-                    'voice': asdict(self.voice),
-                    'hotkeys': asdict(self.hotkeys),
-                    'interaction': asdict(self.interaction),
-                    'proactive': asdict(self.proactive),
-                    'storage': asdict(self.storage),
-                    'update': asdict(self.update),
-                    'session_id': self.session_id,
+                    "server": asdict(self.server),
+                    "appearance": appearance_data,
+                    "chat_window": asdict(self.chat_window),
+                    "voice": asdict(self.voice),
+                    "hotkeys": asdict(self.hotkeys),
+                    "interaction": asdict(self.interaction),
+                    "proactive": asdict(self.proactive),
+                    "storage": asdict(self.storage),
+                    "update": asdict(self.update),
+                    "session_id": self.session_id,
                 }
-                
+
                 # 不保存密码和 token 的明文（可选：加密存储）
                 # 这里简单处理，不保存敏感信息
                 # data['server']['password'] = ""  # 可选：不保存密码
-                
-                with open(path, 'w', encoding='utf-8') as f:
+
+                with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
-                
-                print(f"[DEBUG] 配置已成功保存到: {path}")
+
+                logger.debug(f"配置已成功保存到: {path}")
                 return True
-                
+
             except Exception as e:
                 import traceback
-                print(f"保存配置失败: {e}")
+
+                logger.error(f"保存配置失败: {e}")
                 traceback.print_exc()
                 return False
-    
+
     def to_legacy_dict(self) -> dict:
         """转换为旧版（插件模式）配置格式，用于兼容现有 GUI 组件"""
         return {
             # 服务器配置
-            'server_url': self.server.url,
-            'username': self.server.username,
-            'auto_reconnect': self.server.auto_reconnect,
+            "server_url": self.server.url,
+            "username": self.server.username,
+            "auto_reconnect": self.server.auto_reconnect,
             # 外观配置
-            'ball_size': self.appearance.ball_size,
-            'ball_opacity': self.appearance.ball_opacity,
-            'avatar_path': self.appearance.avatar_path,
-            'theme': self.appearance.theme,
+            "ball_size": self.appearance.ball_size,
+            "ball_opacity": self.appearance.ball_opacity,
+            "avatar_path": self.appearance.avatar_path,
+            "theme": self.appearance.theme,
             # 对话窗口配置
-            'window_width': self.chat_window.window_width,
-            'window_height': self.chat_window.window_height,
-            'font_size': self.chat_window.font_size,
+            "window_width": self.chat_window.window_width,
+            "window_height": self.chat_window.window_height,
+            "font_size": self.chat_window.font_size,
             # 语音配置
-            'enable_tts': self.voice.enable_tts,
-            'auto_play_voice': self.voice.auto_play_voice,
-            'dual_output': self.voice.dual_output,
+            "enable_tts": self.voice.enable_tts,
+            "auto_play_voice": self.voice.auto_play_voice,
+            "dual_output": self.voice.dual_output,
         }
-    
+
     def update_from_legacy_dict(self, legacy: dict):
         """从旧版配置格式更新"""
         # 服务器配置
-        if 'server_url' in legacy:
-            self.server.url = legacy['server_url']
-        if 'username' in legacy:
-            self.server.username = legacy['username']
-        if 'password' in legacy:
-            self.server.password = legacy['password']
-        if 'auto_reconnect' in legacy:
-            self.server.auto_reconnect = legacy['auto_reconnect']
-        
+        if "server_url" in legacy:
+            self.server.url = legacy["server_url"]
+        if "username" in legacy:
+            self.server.username = legacy["username"]
+        if "password" in legacy:
+            self.server.password = legacy["password"]
+        if "auto_reconnect" in legacy:
+            self.server.auto_reconnect = legacy["auto_reconnect"]
+
         # 外观配置
-        if 'ball_size' in legacy:
-            self.appearance.ball_size = legacy['ball_size']
-        if 'ball_opacity' in legacy:
-            self.appearance.ball_opacity = legacy['ball_opacity']
-        if 'avatar_path' in legacy:
-            self.appearance.avatar_path = legacy['avatar_path']
-        if 'theme' in legacy:
-            self.appearance.theme = legacy['theme']
-        
+        if "ball_size" in legacy:
+            self.appearance.ball_size = legacy["ball_size"]
+        if "ball_opacity" in legacy:
+            self.appearance.ball_opacity = legacy["ball_opacity"]
+        if "avatar_path" in legacy:
+            self.appearance.avatar_path = legacy["avatar_path"]
+        if "theme" in legacy:
+            self.appearance.theme = legacy["theme"]
+
         # 对话窗口配置
-        if 'window_width' in legacy:
-            self.chat_window.window_width = legacy['window_width']
-        if 'window_height' in legacy:
-            self.chat_window.window_height = legacy['window_height']
-        if 'font_size' in legacy:
-            self.chat_window.font_size = legacy['font_size']
-        
+        if "window_width" in legacy:
+            self.chat_window.window_width = legacy["window_width"]
+        if "window_height" in legacy:
+            self.chat_window.window_height = legacy["window_height"]
+        if "font_size" in legacy:
+            self.chat_window.font_size = legacy["font_size"]
+
         # 语音配置
-        if 'enable_tts' in legacy:
-            self.voice.enable_tts = legacy['enable_tts']
-        if 'auto_play_voice' in legacy:
-            self.voice.auto_play_voice = legacy['auto_play_voice']
-        if 'dual_output' in legacy:
-            self.voice.dual_output = legacy['dual_output']
+        if "enable_tts" in legacy:
+            self.voice.enable_tts = legacy["enable_tts"]
+        if "auto_play_voice" in legacy:
+            self.voice.auto_play_voice = legacy["auto_play_voice"]
+        if "dual_output" in legacy:
+            self.voice.dual_output = legacy["dual_output"]
 
 
 def load_config(config_path: Optional[str] = None) -> ClientConfig:
