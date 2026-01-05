@@ -306,10 +306,11 @@ class DesktopClientApp(QObject):
                     asyncio.ensure_future(self._sync_config_to_server())
 
             # 启动 WebSocket 客户端，同时传入消息和命令处理回调
-            # 注意：使用配置中的 ws_port 连接独立的 WebSocket 服务器（默认端口 6190）
+            # 注意：优先使用自定义 ws_url，否则使用 ws_port 连接
+            ws_url = self.config.server.ws_url if self.config.server.ws_url else None
             logger.info(
                 f"启动 WebSocket 连接 - 服务器: {self.config.server.url}, "
-                f"WS端口: {self.config.server.ws_port}, Session: {session_id}"
+                f"自定义WS地址: {ws_url or '无'}, WS端口: {self.config.server.ws_port}, Session: {session_id}"
             )
 
             await self._bridge.api_client.start_websocket(
@@ -317,6 +318,7 @@ class DesktopClientApp(QObject):
                 on_message=self._on_websocket_message,
                 on_command=on_remote_command,
                 ws_port=self.config.server.ws_port,
+                ws_url=ws_url,
             )
 
             # 设置连接状态回调

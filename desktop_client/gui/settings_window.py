@@ -302,6 +302,17 @@ class SettingsWindow(QWidget):
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         section.add_row("密码", self._password)
 
+        # 自定义 WebSocket 地址（高级选项）
+        self._ws_url = QLineEdit()
+        self._ws_url.setPlaceholderText("留空则自动生成 (如需自定义: wss://example.com/ws/client)")
+        self._ws_url.setToolTip(
+            "自定义 WebSocket 连接地址。\n"
+            "适用于使用 Cloudflare 等 CDN/隧道的场景。\n"
+            "留空则根据服务器地址自动生成。\n"
+            "格式示例: wss://yourdomain.com/ws/client"
+        )
+        section.add_row("WebSocket 地址 (可选)", self._ws_url)
+
         self._enable_streaming = QCheckBox("启用流式输出 (打字机效果)")
         section.add_widget(self._enable_streaming)
 
@@ -1789,11 +1800,13 @@ class SettingsWindow(QWidget):
             self._server_url.setText(self.config.server.url or "")
             self._username.setText(self.config.server.username or "")
             self._password.setText(self.config.server.password or "")
+            self._ws_url.setText(self.config.server.ws_url or "")
             self._enable_streaming.setChecked(self.config.server.enable_streaming)
         elif isinstance(self.config, dict):  # Dict
             self._server_url.setText(self.config.get("server_url", ""))
             self._username.setText(self.config.get("username", ""))
             self._password.setText(self.config.get("password", ""))
+            self._ws_url.setText(self.config.get("ws_url", ""))
 
         # 外观设置
         if hasattr(self.config, "appearance"):
@@ -2226,6 +2239,7 @@ class SettingsWindow(QWidget):
                 "url": self._server_url.text(),
                 "username": self._username.text(),
                 "password": self._password.text(),
+                "ws_url": self._ws_url.text(),
                 "enable_streaming": self._enable_streaming.isChecked(),
             },
             "appearance": {
@@ -2292,6 +2306,7 @@ class SettingsWindow(QWidget):
             self.config.server.url = settings["server"]["url"]
             self.config.server.username = settings["server"]["username"]
             self.config.server.password = settings["server"]["password"]
+            self.config.server.ws_url = settings["server"]["ws_url"]
             self.config.server.enable_streaming = settings["server"]["enable_streaming"]
 
             # 外观

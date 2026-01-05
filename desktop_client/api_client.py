@@ -87,53 +87,89 @@ class WebSocketClient:
         on_connection_state: Optional[Callable[[str], None]] = None,
         on_reconnect: Optional[Callable[[], None]] = None,
         ws_port: Optional[int] = None,
+        ws_url: Optional[str] = None,
     ):
         """
         初始化 WebSocket 客户端
 
         Args:
+            ws_url: 自定义的完整 WebSocket 地址。如果设置，将忽略 ws_port，直接使用此地址。
+                    格式示例: wss://example.com/ws/client
+                    注意: token 和 session_id 会自动追加到 URL 查询参数中
             ws_port: WebSocket 服务端口。
                      - 如果指定了端口（如 6190），将连接到该独立端口
                      - 如果为 None，将复用 API 端口（统一端口模式）
             on_connection_state: 连接状态变化回调，参数为状态字符串
             on_reconnect: 重连成功回调，用于通知上层重置状态
         """
-        # 解析服务器 URL，提取 host 和 port
-        from urllib.parse import urlparse
-
-        parsed = urlparse(server_url)
-        host = parsed.hostname or "localhost"
-        scheme = "wss" if parsed.scheme == "https" else "ws"
-
-        # 获取 API 端口
-        api_port = parsed.port
-        if not api_port:
-            api_port = 443 if parsed.scheme == "https" else 80
-
-        # 端口选择逻辑：
-        # - 如果显式指定了 ws_port，使用指定的端口（独立端口模式）
-        # - 否则复用 API 端口（统一端口模式）
-        if ws_port is not None:
-            port = ws_port
-            logger.info(f"使用独立端口模式: {port}")
-        else:
-            port = api_port
-            logger.info(f"使用统一端口模式 (复用 API 端口): {port}")
-
-        # 构建 WebSocket URL
-        self.url = (
-            f"{scheme}://{host}:{port}/ws/client?token={token}&session_id={session_id}"
-        )
         self.session_id = session_id
 
-        # 详细日志：帮助调试连接问题（隐藏敏感信息）
-        safe_url = f"{scheme}://{host}:{port}/ws/client"
-        logger.info("WebSocket 客户端初始化:")
-        logger.info(f"  - 源 server_url: {server_url}")
-        logger.info(f"  - 解析 host: {host}")
-        logger.info(f"  - 目标端口: {port}")
-        logger.info(f"  - WebSocket 端点: {safe_url}")
-        logger.info(f"  - Session ID: {session_id}")
+        # 优先使用自定义 ws_url
+        if ws_url:
+            # 使用自定义完整 WebSocket 地址
+            from urllib.parse import urlparse, urlencode, urlunparse, parse_qs
+
+            parsed = urlparse(ws_url)
+            # 解析现有查询参数并添加 token 和 session_id
+            query_params = parse_qs(parsed.query)
+            query_params['token'] = [token]
+            query_params['session_id'] = [session_id]
+            # 重新构建查询字符串（扁平化参数）
+            new_query = urlencode({k: v[0] for k, v in query_params.items()})
+            # 重新构建完整 URL
+            self.url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path or '/ws/client',
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
+
+            # 构建安全的日志 URL（不含 token）
+            safe_query = urlencode({'session_id': session_id})
+            safe_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path or '/ws/client', '', safe_query, ''))
+
+            logger.info("WebSocket 客户端初始化 (自定义地址模式):")
+            logger.info(f"  - 自定义 ws_url: {ws_url}")
+            logger.info(f"  - 最终 WebSocket 端点: {safe_url}")
+            logger.info(f"  - Session ID: {session_id}")
+        else:
+            # 解析服务器 URL，提取 host 和 port（原有逻辑）
+            from urllib.parse import urlparse
+
+            parsed = urlparse(server_url)
+            host = parsed.hostname or "localhost"
+            scheme = "wss" if parsed.scheme == "https" else "ws"
+
+            # 获取 API 端口
+            api_port = parsed.port
+            if not api_port:
+                api_port = 443 if parsed.scheme == "https" else 80
+
+            # 端口选择逻辑：
+            # - 如果显式指定了 ws_port，使用指定的端口（独立端口模式）
+            # - 否则复用 API 端口（统一端口模式）
+            if ws_port is not None:
+                port = ws_port
+                logger.info(f"使用独立端口模式: {port}")
+            else:
+                port = api_port
+                logger.info(f"使用统一端口模式 (复用 API 端口): {port}")
+
+            # 构建 WebSocket URL
+            self.url = (
+                f"{scheme}://{host}:{port}/ws/client?token={token}&session_id={session_id}"
+            )
+
+            # 详细日志：帮助调试连接问题（隐藏敏感信息）
+            safe_url = f"{scheme}://{host}:{port}/ws/client"
+            logger.info("WebSocket 客户端初始化:")
+            logger.info(f"  - 源 server_url: {server_url}")
+            logger.info(f"  - 解析 host: {host}")
+            logger.info(f"  - 目标端口: {port}")
+            logger.info(f"  - WebSocket 端点: {safe_url}")
+            logger.info(f"  - Session ID: {session_id}")
 
         self.on_message = on_message
         self.on_command = (
@@ -1258,6 +1294,7 @@ class AstrBotApiClient:
         on_message: Optional[Callable[[dict], None]] = None,
         on_command: Optional[Callable[[str, str, dict], Any]] = None,
         ws_port: Optional[int] = None,
+        ws_url: Optional[str] = None,
     ):
         """
         启动 WebSocket 连接
@@ -1266,6 +1303,8 @@ class AstrBotApiClient:
             session_id: 会话 ID
             on_message: 消息处理回调，接收 dict 类型消息
             on_command: 命令处理回调，接收 (command, request_id, params)，返回执行结果
+            ws_url: 自定义的完整 WebSocket 地址。如果设置，将忽略 ws_port。
+                    格式示例: wss://example.com/ws/client
             ws_port: WebSocket 服务端口。
                      - 如果指定（如 6190），将连接到该独立端口
                      - 如果为 None，将复用 API 端口
@@ -1286,6 +1325,7 @@ class AstrBotApiClient:
             on_connection_state=self._on_ws_connection_state_change,
             on_reconnect=self._on_ws_reconnect,  # 添加重连回调
             ws_port=ws_port,
+            ws_url=ws_url,
         )
         await self.ws_client.start()
 

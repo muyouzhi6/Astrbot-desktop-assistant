@@ -37,6 +37,10 @@ class ServerConfig:
     # [已废弃] WebSocket 服务端口。默认为 6190，表示复用 API 端口 (统一端口模式)。
     # 如果设置为其他值，将尝试连接该特定端口 (兼容旧版插件)。
     ws_port: int = 6190
+    # 自定义 WebSocket 完整地址。如果设置，将忽略 ws_port，直接使用此地址连接。
+    # 格式示例: wss://example.com/ws/client 或 ws://192.168.1.100:6190/ws/client
+    # 留空则自动根据 url 和 ws_port 构建连接地址
+    ws_url: str = ""
 
 
 @dataclass
