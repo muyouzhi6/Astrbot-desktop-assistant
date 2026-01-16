@@ -185,11 +185,13 @@ class MessageBridge(QObject):
             streaming = self.config.server.enable_streaming
 
             if msg.msg_type == "text":
+                logger.info(f"发送文本消息: session_id={session_id}, content_len={len(msg.content)}")
                 async for event in self.api_client.send_text_message(
                     session_id=session_id,
                     text=msg.content,
                     enable_streaming=streaming,
                 ):
+                    logger.debug(f"收到 SSE 事件: type={event.event_type}")
                     self._handle_sse_event(event, session_id, request_id)
                     await asyncio.sleep(0)
 
@@ -253,9 +255,15 @@ class MessageBridge(QObject):
             if event.chain_type == "reasoning":
                 return  # 不显示思维链内容
 
-            # Bug 2 修复：检测并处理 JSON 格式的函数调用结果
             content = event.data
-            if content and not event.streaming:
+
+            # Bug 修复：过滤工具函数调用的 JSON（流式和非流式都需要处理）
+            if content:
+                # 检测是否是工具调用的原始 JSON（不应该显示给用户）
+                if self._is_tool_call_json(content):
+                    return  # 完全跳过工具调用 JSON，不显示
+
+                # 尝试提取函数调用结果中的 result 字段
                 content = self._extract_function_result(content)
 
             metadata = {**base_metadata, "chain_type": event.chain_type}
@@ -384,6 +392,48 @@ class MessageBridge(QObject):
             pass
 
         return content
+
+    def _is_tool_call_json(self, content: str) -> bool:
+        """
+        检测内容是否是工具函数调用的 JSON（不应该显示给用户）
+
+        工具调用 JSON 通常包含以下特征：
+        - {"id": "call_xxx", "name": "function_name", "args": {...}}
+        - {"id": "...", "type": "function", ...}
+        """
+        if not content:
+            return False
+
+        content = content.strip()
+
+        # 快速检查是否可能是 JSON
+        if not content.startswith("{"):
+            return False
+
+        try:
+            data = json.loads(content)
+            if not isinstance(data, dict):
+                return False
+
+            # 检测工具调用的特征模式
+            # 模式1: {"id": "call_xxx", "name": "...", "args": ...}
+            if "id" in data and "name" in data and "args" in data:
+                id_value = str(data.get("id", ""))
+                if id_value.startswith("call_"):
+                    return True
+
+            # 模式2: {"id": "...", "type": "function", ...}
+            if "id" in data and data.get("type") == "function":
+                return True
+
+            # 模式3: 包含 function_call 或 tool_calls 字段
+            if "function_call" in data or "tool_calls" in data:
+                return True
+
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+        return False
 
     def update_server_config(
         self,

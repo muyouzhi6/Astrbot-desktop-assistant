@@ -8,7 +8,7 @@ import base64
 import markdown
 from PySide6.QtWidgets import QTextBrowser
 from PySide6.QtGui import QDesktopServices, QPixmap
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QUrl, Qt, QTimer
 from .themes import theme_manager, ThemeType
 
 
@@ -27,6 +27,15 @@ class MarkdownLabel(QTextBrowser):
         self.setFrameShape(QTextBrowser.Shape.NoFrame)
         self.viewport().setAutoFillBackground(False)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        # 移除 QTextBrowser 的默认边距
+        self.setContentsMargins(0, 0, 0, 0)
+        self.document().setDocumentMargin(0)
+        
+        # 设置 size policy 让高度可以扩展
+        from PySide6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         # 图片缓存 - 用于预览
         self._image_cache = {}
@@ -34,6 +43,7 @@ class MarkdownLabel(QTextBrowser):
 
         self._role = role
         self._original_text = ""  # 保存原始 Markdown 文本用于主题更新
+        self._adjusting_height = False  # 防止递归调用
 
         # 应用主题样式（设置默认文字颜色）
         self._apply_theme_style()
@@ -45,10 +55,41 @@ class MarkdownLabel(QTextBrowser):
         self._original_text = text  # 保存原始文本
         html = MarkdownUtils.render(text, self._role)
         self.setHtml(html)
-        # 调整高度以适应内容
-        self.document().adjustSize()
-        h = self.document().size().height()
-        self.setFixedHeight(int(h) + 10)
+        # 延迟调整尺寸，确保布局完成后再计算
+        # 使用更长的延迟确保 maximumWidth 已被设置
+        QTimer.singleShot(10, self._adjust_size)
+
+    def _adjust_size(self):
+        """根据内容自适应调整宽高，确保内容完整显示且无多余空白"""
+        if self._adjusting_height:
+            return
+        self._adjusting_height = True
+        try:
+            doc = self.document()
+            doc.setDocumentMargin(0)  # 确保无文档边距
+            
+            # 获取最大允许宽度
+            max_width = self.maximumWidth()
+            if max_width >= 16777215 or max_width <= 0:
+                max_width = 300  # 默认宽度
+            
+            # 设置文档宽度为最大宽度，让文本自动换行
+            doc.setTextWidth(max_width)
+            doc.adjustSize()
+            
+            # 获取实际内容尺寸
+            content_width = min(int(doc.idealWidth()) + 2, max_width)
+            content_height = int(doc.size().height()) + 2
+            
+            # 重新设置文档宽度为实际内容宽度
+            doc.setTextWidth(content_width)
+            doc.adjustSize()
+            content_height = int(doc.size().height()) + 2
+            
+            # 设置控件的固定尺寸
+            self.setFixedSize(content_width, content_height)
+        finally:
+            self._adjusting_height = False
 
     def update_theme(self):
         """更新主题 - 重新渲染内容以应用新主题颜色"""
@@ -58,10 +99,17 @@ class MarkdownLabel(QTextBrowser):
         if self._original_text:
             html = MarkdownUtils.render(self._original_text, self._role)
             self.setHtml(html)
-            # 调整高度以适应内容
-            self.document().adjustSize()
-            h = self.document().size().height()
-            self.setFixedHeight(int(h) + 10)
+            # 强制刷新样式
+            self.style().unpolish(self)
+            self.style().polish(self)
+            self.update()
+            # 延迟调整尺寸以适应内容
+            QTimer.singleShot(0, self._adjust_size)
+
+    def resizeEvent(self, event):
+        """窗口大小改变时重新计算尺寸"""
+        super().resizeEvent(event)
+        # 不在 resizeEvent 中调用 _adjust_size，避免循环
 
     def _apply_theme_style(self):
         """应用主题样式，设置默认文字颜色

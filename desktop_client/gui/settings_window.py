@@ -490,6 +490,70 @@ class SettingsWindow(QWidget):
 
         layout.addWidget(ball_section)
 
+        # 背景图设置
+        bg_section = SettingsSection("聊天窗口背景")
+
+        # 背景图预览和选择
+        bg_image_row = QFrame()
+        bg_image_layout = QHBoxLayout(bg_image_row)
+        bg_image_layout.setContentsMargins(0, 0, 0, 0)
+
+        bg_label = QLabel("背景图片")
+        bg_label.setObjectName("settingLabel")
+        bg_label.setMinimumWidth(80)
+
+        self._bg_image_preview = QLabel()
+        self._bg_image_preview.setFixedSize(80, 60)
+        self._bg_image_preview.setObjectName("bgImagePreview")
+        self._bg_image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._bg_image_preview.setStyleSheet("""
+            QLabel#bgImagePreview {
+                background-color: #f0f0f0;
+                border: 1px dashed #ccc;
+                border-radius: 4px;
+            }
+        """)
+        self._bg_image_preview.setText("无")
+
+        bg_btns = QFrame()
+        bg_btns_layout = QHBoxLayout(bg_btns)
+        bg_btns_layout.setContentsMargins(0, 0, 0, 0)
+        bg_btns_layout.setSpacing(8)
+
+        self._upload_bg_btn = QPushButton("选择图片")
+        self._upload_bg_btn.clicked.connect(self._on_upload_background)
+
+        self._reset_bg_btn = QPushButton("清除背景")
+        self._reset_bg_btn.clicked.connect(self._on_reset_background)
+
+        bg_btns_layout.addWidget(self._upload_bg_btn)
+        bg_btns_layout.addWidget(self._reset_bg_btn)
+
+        bg_image_layout.addWidget(bg_label)
+        bg_image_layout.addWidget(self._bg_image_preview)
+        bg_image_layout.addWidget(bg_btns)
+        bg_image_layout.addStretch()
+
+        bg_section.add_widget(bg_image_row)
+
+        # 背景透明度
+        self._bg_opacity = QDoubleSpinBox()
+        self._bg_opacity.setRange(0.1, 1.0)
+        self._bg_opacity.setSingleStep(0.1)
+        self._bg_opacity.setValue(0.3)
+        self._bg_opacity.setToolTip("背景图片的透明度，值越小越透明")
+        bg_section.add_row("背景透明度", self._bg_opacity)
+
+        # 背景模糊度
+        self._bg_blur = QSpinBox()
+        self._bg_blur.setRange(0, 20)
+        self._bg_blur.setValue(0)
+        self._bg_blur.setSuffix(" px")
+        self._bg_blur.setToolTip("背景图片的模糊程度，0 表示不模糊")
+        bg_section.add_row("背景模糊度", self._bg_blur)
+
+        layout.addWidget(bg_section)
+
         # 系统设置
         system_section = SettingsSection("系统设置")
 
@@ -2190,6 +2254,43 @@ class SettingsWindow(QWidget):
             icon_manager.get_pixmap("bot", c.text_primary, 32)
         )
         self._bot_avatar_path = ""
+
+    def _on_upload_background(self):
+        """上传背景图片"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择背景图片",
+            "",
+            "图片文件 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)",
+        )
+        if file_path:
+            pixmap = QPixmap(file_path)
+            if not pixmap.isNull():
+                # 缩放预览
+                pixmap = pixmap.scaled(
+                    80,
+                    60,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self._bg_image_preview.setPixmap(pixmap)
+                self._bg_image_preview.setText("")
+                self._bg_image_path = file_path
+
+    def _on_reset_background(self):
+        """清除背景图片"""
+        self._bg_image_preview.clear()
+        self._bg_image_preview.setText("无")
+        c = theme_manager.get_current_colors()
+        self._bg_image_preview.setStyleSheet(f"""
+            QLabel#bgImagePreview {{
+                background-color: {c.bg_tertiary};
+                border: 1px dashed {c.border_base};
+                border-radius: 4px;
+                color: {c.text_secondary};
+            }}
+        """)
+        self._bg_image_path = ""
 
     @asyncSlot()
     async def _on_test_connection(self):

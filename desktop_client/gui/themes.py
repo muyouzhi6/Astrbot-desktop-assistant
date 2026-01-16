@@ -300,6 +300,64 @@ THEME_OCEAN = Theme(
     ),
 )
 
+# 抖音/TikTok 风格主题
+THEME_TIKTOK = Theme(
+    name="tiktok",
+    display_name="抖音风格",
+    type=ThemeType.DARK,
+    colors=ThemeColors(
+        # TikTok 品牌色
+        primary="#FE2C55",  # TikTok 粉红
+        primary_light="#FF4D6D",
+        primary_dark="#E91E4D",
+        # 辅助强调色
+        success="#22C55E",
+        warning="#F59E0B",
+        danger="#EF4444",
+        info="#25F4EE",  # TikTok 青色
+        # 深色背景
+        bg_primary="#121212",  # 主背景
+        bg_secondary="#1E1E1E",  # 次级背景（头部、输入区）
+        bg_tertiary="#2A2A2A",  # 三级背景（接收气泡、输入框）
+        bg_hover="#333333",
+        # 文字色
+        text_primary="#E0E0E0",  # 主文字
+        text_regular="#D0D0D0",
+        text_secondary="#A0A0A0",  # 次级文字（时间戳）
+        text_placeholder="#666666",  # 占位符
+        text_inverse="#FFFFFF",  # 强调色上的文字
+        # 系统通知
+        system_notice_text="#A0A0A0",
+        # 边框色
+        border_base="#2A2A2A",
+        border_light="#333333",
+        border_lighter="#404040",
+        border_extra_light="#505050",
+        # 阴影
+        shadow_base="rgba(0, 0, 0, 0.4)",
+        shadow_light="rgba(0, 0, 0, 0.2)",
+        # 悬浮球
+        ball_bg="#FE2C55",
+        ball_border="#E91E4D",
+        ball_glow="rgba(254, 44, 85, 0.5)",
+        # 气泡 - 抖音风格
+        bubble_user_bg="#FE2C55",  # 发送方气泡 - TikTok 粉红
+        bubble_user_text="#FFFFFF",
+        bubble_ai_bg="#2A2A2A",  # 接收方气泡 - 深灰
+        bubble_ai_text="#E0E0E0",
+        bubble_ai_border="#333333",
+    ),
+    # 抖音风格圆角更大
+    border_radius=18,
+    border_radius_small=10,
+    border_radius_large=22,
+    # 字体
+    font_family='-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif',
+    font_size_base=15,
+    font_size_small=12,
+    font_size_large=17,
+)
+
 THEME_MACOS_LIGHT = Theme(
     name="macos_light",
     display_name="macOS 风格（浅色）",
@@ -348,6 +406,7 @@ THEME_MACOS_LIGHT = Theme(
 
 # 所有预设主题
 PRESET_THEMES: Dict[str, Theme] = {
+    "tiktok": THEME_TIKTOK,  # 抖音风格置顶
     "light_blue": THEME_LIGHT_BLUE,
     "light_green": THEME_LIGHT_GREEN,
     "light_purple": THEME_LIGHT_PURPLE,

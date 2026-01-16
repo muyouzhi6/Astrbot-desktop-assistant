@@ -86,10 +86,14 @@ class AppearanceConfig:
     avatar_path: str = ""  # 悬浮球头像（向后兼容，同时作为bot头像）
     user_avatar_path: str = ""  # 用户头像路径
     bot_avatar_path: str = ""  # Bot头像路径
-    theme: str = "auto"
+    theme: str = "tiktok"  # 默认使用抖音主题
     always_on_top: bool = False
     breathing_enabled: bool = True
     auto_start: bool = False  # 开机自启
+    # 背景图配置
+    background_image_path: str = ""  # 聊天窗口背景图路径
+    background_opacity: float = 0.3  # 背景图透明度 (0.0-1.0)
+    background_blur: int = 0  # 背景模糊程度 (0-20)
     # 自定义主题颜色
     custom_theme: CustomThemeConfig = field(default_factory=CustomThemeConfig)
 

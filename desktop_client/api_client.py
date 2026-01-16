@@ -1619,6 +1619,9 @@ class AstrBotApiClient:
         # 为每个请求创建独立的客户端（关键：避免消息错位）
         # 使用独立连接确保响应流不会混淆
         client = self._create_sse_client()
+        
+        logger.info(f"[SSE] 发送消息请求: session_id={session_id}, streaming={enable_streaming}")
+        logger.debug(f"[SSE] 请求体: {body}")
 
         try:
             headers = self._get_headers()
@@ -1628,13 +1631,16 @@ class AstrBotApiClient:
             # 强制不复用连接
             headers["Connection"] = "close"
 
+            logger.debug(f"[SSE] 开始发送请求到 {self.api_base}/chat/send")
             async with client.stream(
                 "POST",
                 f"{self.api_base}/chat/send",
                 json=body,
                 headers=headers,
             ) as response:
+                logger.info(f"[SSE] 收到响应: HTTP {response.status_code}")
                 if response.status_code != 200:
+                    logger.error(f"[SSE] 请求失败: HTTP {response.status_code}")
                     yield SSEEvent(
                         event_type="error",
                         data=f"HTTP {response.status_code}",
@@ -1642,6 +1648,7 @@ class AstrBotApiClient:
                     return
 
                 # 手动处理 SSE 流
+                logger.debug("[SSE] 开始处理 SSE 流")
                 async for line in response.aiter_lines():
                     if not line:
                         continue
@@ -1665,6 +1672,7 @@ class AstrBotApiClient:
                                 chain_type=event_data.get("chain_type", "normal"),
                                 raw=event_data,
                             )
+                            logger.debug(f"[SSE] 收到事件: type={event_type}, streaming={event.streaming}, data_len={len(event.data)}")
                             yield event
 
                             # 让出控制权 - 关键！
@@ -1673,9 +1681,11 @@ class AstrBotApiClient:
                             if event.event_type == "end":
                                 return
                         except json.JSONDecodeError:
+                            logger.warning(f"[SSE] JSON 解析失败: {data_str[:100]}")
                             continue
 
         except httpx.ConnectError as e:
+            logger.error(f"[SSE] 连接失败: {e}")
             self.state = ConnectionState.DISCONNECTED
             yield SSEEvent(event_type="error", data=f"连接失败: {e}")
         except httpx.TimeoutException as e:

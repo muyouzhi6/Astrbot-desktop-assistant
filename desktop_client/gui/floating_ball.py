@@ -207,6 +207,12 @@ class CompactChatWindow(QWidget):
         self._resize_margin = 6
         self._last_pos = QPoint()
 
+        # 背景图配置
+        self._background_image_path = ""
+        self._background_opacity = 0.3
+        self._background_blur = 0
+        self._background_pixmap: Optional[QPixmap] = None
+
         # 主容器
         self._container = QFrame()
         self._container.setObjectName("compactContainer")
@@ -258,7 +264,8 @@ class CompactChatWindow(QWidget):
         self._history_layout = QVBoxLayout(self._history_widget)
         self._history_layout.setContentsMargins(0, 0, 0, 0)
         self._history_layout.setSpacing(8)
-        self._history_layout.addStretch()
+        # 将 stretch 放在开头，让消息从底部向上堆叠（类似微信风格）
+        self._history_layout.addStretch(1)
 
         self._scroll_area.setWidget(self._history_widget)
         container_layout.addWidget(self._scroll_area)
@@ -465,22 +472,32 @@ class CompactChatWindow(QWidget):
         """递归更新组件及其子组件的主题"""
         if isinstance(widget, MarkdownLabel):
             widget.update_theme()
+        elif isinstance(widget, QFrame):
+            # 检查是否是 AI 气泡容器
+            if widget.objectName() == "aiBubble":
+                widget.setStyleSheet(f"""
+                    QFrame#aiBubble {{
+                        background-color: {c.bubble_ai_bg};
+                        border: 1px solid {c.bubble_ai_border};
+                        border-radius: {t.border_radius_large}px;
+                        border-bottom-left-radius: 4px;
+                        padding: 0px;
+                    }}
+                """)
         elif isinstance(widget, QLabel):
             # 检查是否是用户消息气泡（通过检查样式表中是否包含 bubble 相关颜色）
             current_style = widget.styleSheet()
             if "bubble" in current_style.lower() or "background-color" in current_style:
                 # 判断是用户消息还是头像标签
-                # 用户消息气泡有 border-radius: 12px 和 padding: 10px
-                if (
-                    "border-radius: 12px" in current_style
-                    and "padding: 10px" in current_style
-                ):
+                # 用户消息气泡有 padding: 12px 16px（抖音风格）
+                if "padding: 12px 16px" in current_style:
                     widget.setStyleSheet(f"""
                         QLabel {{
                             color: {c.bubble_user_text};
                             background-color: {c.bubble_user_bg};
-                            border-radius: 12px;
-                            padding: 10px;
+                            border-radius: {t.border_radius_large}px;
+                            border-bottom-right-radius: 4px;
+                            padding: 12px 16px;
                             font-family: {t.font_family};
                             font-size: {t.font_size_base}px;
                         }}
@@ -538,9 +555,9 @@ class CompactChatWindow(QWidget):
         self._history_loading = True
 
         try:
-            # 清空当前显示
+            # 清空当前显示（保留索引 0 的 stretch）
             while self._history_layout.count() > 1:
-                item = self._history_layout.itemAt(0)
+                item = self._history_layout.itemAt(1)  # 从索引 1 开始删除，保留 stretch
                 if item and item.widget():
                     w = item.widget()
                     if w is not None:
@@ -640,12 +657,14 @@ class CompactChatWindow(QWidget):
         c = (
             theme_manager.get_current_colors()
         )  # 使用 get_current_colors() 获取应用了自定义颜色的最终配置
+        # 抖音风格气泡：大圆角 + 右下角小圆角（尾巴效果）
         lbl.setStyleSheet(f"""
             QLabel {{
                 color: {c.bubble_user_text};
                 background-color: {c.bubble_user_bg};
-                border-radius: 12px;
-                padding: 10px;
+                border-radius: {t.border_radius_large}px;
+                border-bottom-right-radius: 4px;
+                padding: 12px 16px;
                 font-family: {t.font_family};
                 font-size: {t.font_size_base}px;
             }}
@@ -730,16 +749,17 @@ class CompactChatWindow(QWidget):
         )
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(8)
+
+        t = theme_manager.current_theme
+        c = (
+            theme_manager.get_current_colors()
+        )  # 使用 get_current_colors() 获取应用了自定义颜色的最终配置
 
         # 机器人头像
         avatar = QLabel()
         avatar.setFixedSize(32, 32)
         avatar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-        c = (
-            theme_manager.get_current_colors()
-        )  # 使用 get_current_colors() 获取应用了自定义颜色的最终配置
 
         if self._bot_avatar_pixmap and not self._bot_avatar_pixmap.isNull():
             circular_avatar = self._create_circular_avatar(self._bot_avatar_pixmap, 32)
@@ -756,12 +776,29 @@ class CompactChatWindow(QWidget):
 
         layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignTop)
 
-        md_label = MarkdownLabel(text, parent=container)
-        # 最大宽度为窗口宽度的 75%
-        md_label.setMaximumWidth(int(self.width() * 0.75))
-        md_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
-        layout.addWidget(md_label)
+        # 气泡容器 - 抖音风格大圆角 + 左下角小圆角（尾巴效果）
+        bubble_frame = QFrame()
+        bubble_frame.setObjectName("aiBubble")
+        bubble_frame.setStyleSheet(f"""
+            QFrame#aiBubble {{
+                background-color: {c.bubble_ai_bg};
+                border: 1px solid {c.bubble_ai_border};
+                border-radius: {t.border_radius_large}px;
+                border-bottom-left-radius: 4px;
+                padding: 0px;
+            }}
+        """)
+        bubble_layout = QVBoxLayout(bubble_frame)
+        bubble_layout.setContentsMargins(12, 10, 12, 10)
+        bubble_layout.setSpacing(0)
 
+        md_label = MarkdownLabel(text, parent=bubble_frame)
+        # 最大宽度为窗口宽度的 70%
+        md_label.setMaximumWidth(int(self.width() * 0.70))
+        md_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
+        bubble_layout.addWidget(md_label)
+
+        layout.addWidget(bubble_frame)
         layout.addStretch()
         container.adjustSize()
 
@@ -1012,9 +1049,9 @@ class CompactChatWindow(QWidget):
 
     def _on_history_cleared(self):
         """处理历史记录清除信号"""
-        # 清空所有显示的消息
+        # 清空所有显示的消息（保留索引 0 的 stretch）
         while self._history_layout.count() > 1:  # 保留 stretch
-            item = self._history_layout.itemAt(0)
+            item = self._history_layout.itemAt(1)  # 从索引 1 开始删除，保留 stretch
             if item:
                 w = item.widget()
                 if w is not None:
@@ -1350,13 +1387,12 @@ class CompactChatWindow(QWidget):
         # 如果是图片消息，保留其 Fixed 高度策略
         # widget.setMaximumWidth(340)  # 限制最大宽度，避免横向滚动条
 
-        # 插入到 stretch 之前
-        count = self._history_layout.count()
-        self._history_layout.insertWidget(count - 1, widget)
+        # 直接添加到布局末尾（stretch 在开头，消息在后面）
+        self._history_layout.addWidget(widget)
 
-        # 限制历史数量
+        # 限制历史数量（从 stretch 后的第一个 widget 开始删除，即索引 1）
         while self._history_layout.count() > self._max_history + 1:  # +1 for stretch
-            item = self._history_layout.itemAt(0)
+            item = self._history_layout.itemAt(1)  # 跳过 stretch（索引 0）
             if item:
                 w = item.widget()
                 if w:
