@@ -26,6 +26,7 @@ from PySide6.QtCore import (
     QEasingCurve,
     Property,
     QSize,
+    QRectF,
 )
 from PySide6.QtGui import (
     QPixmap,
@@ -36,6 +37,8 @@ from PySide6.QtGui import (
     QPen,
     QRadialGradient,
     QPainterPath,
+    QImage,
+    QCursor,
 )
 from PySide6.QtWidgets import (
     QWidget,
@@ -160,11 +163,15 @@ class CompactChatWindow(QWidget):
     def __init__(self, parent=None, max_history: int = 50, config=None):
         super().__init__(parent)
         self._config = config
-        self.setWindowFlags(
+        self._always_on_top = True
+        self._base_window_flags = (
             Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
         )
+        flags = self._base_window_flags
+        if self._always_on_top:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self._max_history = max_history
@@ -203,6 +210,7 @@ class CompactChatWindow(QWidget):
 
         # 调整大小相关状态
         self._resizing = False
+        self._user_resized = False
         self._resize_edge = None  # 'left', 'right', 'top', 'bottom', 'top-left', etc.
         self._resize_margin = 6
         self._last_pos = QPoint()
@@ -212,6 +220,7 @@ class CompactChatWindow(QWidget):
         self._background_opacity = 0.3
         self._background_blur = 0
         self._background_pixmap: Optional[QPixmap] = None
+        self._background_image: Optional[QImage] = None
 
         # 主容器
         self._container = QFrame()
@@ -258,7 +267,29 @@ class CompactChatWindow(QWidget):
         # 设置初始大小和最小大小，允许调整
         self.setMinimumWidth(300)
         self.setMinimumHeight(200)
-        self.resize(360, 480)  # 默认大小
+        default_width = 360
+        default_height = 480
+        if self._config and hasattr(self._config, "chat_window"):
+            chat_window = getattr(self._config, "chat_window")
+            try:
+                default_width = int(getattr(chat_window, "window_width", default_width))
+            except (TypeError, ValueError):
+                pass
+            try:
+                default_height = int(getattr(chat_window, "window_height", default_height))
+            except (TypeError, ValueError):
+                pass
+        elif isinstance(self._config, dict) and "chat_window" in self._config:
+            chat_window = self._config.get("chat_window", {})
+            try:
+                default_width = int(chat_window.get("window_width", default_width))
+            except (TypeError, ValueError):
+                pass
+            try:
+                default_height = int(chat_window.get("window_height", default_height))
+            except (TypeError, ValueError):
+                pass
+        self.resize(default_width, default_height)
 
         self._history_widget = QWidget()
         self._history_layout = QVBoxLayout(self._history_widget)
@@ -360,14 +391,23 @@ class CompactChatWindow(QWidget):
             theme_manager.get_current_colors()
         )  # 使用 get_current_colors() 获取应用了自定义颜色的最终配置
 
-        # 容器
-        self._container.setStyleSheet(f"""
-            QFrame#compactContainer {{
-                background-color: {c.bg_primary};
-                border: 1px solid {c.border_light};
-                border-radius: {t.border_radius + 4}px;
-            }}
-        """)
+        # 容器 - 如果有背景图则透明
+        if self._has_background():
+            self._container.setStyleSheet(f"""
+                QFrame#compactContainer {{
+                    background-color: transparent;
+                    border: 1px solid {c.border_light};
+                    border-radius: {t.border_radius + 4}px;
+                }}
+            """)
+        else:
+            self._container.setStyleSheet(f"""
+                QFrame#compactContainer {{
+                    background-color: {c.bg_primary};
+                    border: 1px solid {c.border_light};
+                    border-radius: {t.border_radius + 4}px;
+                }}
+            """)
 
         # 关闭按钮
         self._close_btn.setStyleSheet(f"""
@@ -509,19 +549,133 @@ class CompactChatWindow(QWidget):
                 if isinstance(child, QWidget):
                     self._update_widget_theme(child, c, t)
 
+    def set_always_on_top(self, enabled: bool) -> None:
+        self._always_on_top = bool(enabled)
+        flags = self._base_window_flags
+        if self._always_on_top:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        if self.isVisible():
+            self.show()
+            if self._always_on_top:
+                QTimer.singleShot(0, self.raise_)
+
+    def _has_background(self) -> bool:
+        return bool(self._background_image_path)
+
+    def set_background_config(
+        self,
+        image_path: str,
+        opacity: Optional[float] = None,
+        blur: Optional[int] = None,
+    ):
+        if opacity is not None:
+            try:
+                self._background_opacity = max(0.0, min(1.0, float(opacity)))
+            except (TypeError, ValueError):
+                self._background_opacity = 0.3
+        if blur is not None:
+            try:
+                self._background_blur = max(0, min(20, int(blur)))
+            except (TypeError, ValueError):
+                self._background_blur = 0
+        self._background_image_path = image_path or ""
+        self._load_background_image()
+        self._apply_theme()
+        self.update()
+
+    def _load_background_image(self) -> None:
+        self._background_image = None
+        self._background_pixmap = None
+        if not self._background_image_path:
+            return
+        if not os.path.exists(self._background_image_path):
+            self._background_image_path = ""
+            return
+        image = QImage(self._background_image_path)
+        if image.isNull():
+            self._background_image_path = ""
+            return
+        self._background_image = image
+        self._rebuild_background_pixmap()
+
+    def _rebuild_background_pixmap(self) -> None:
+        if self._background_image is None:
+            self._background_pixmap = None
+            return
+        target_rect = self._container.geometry()
+        if target_rect.width() <= 0 or target_rect.height() <= 0:
+            return
+        target_size = target_rect.size()
+        image = self._background_image
+        scaled = image.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        if scaled.width() != target_size.width() or scaled.height() != target_size.height():
+            x = max(0, (scaled.width() - target_size.width()) // 2)
+            y = max(0, (scaled.height() - target_size.height()) // 2)
+            scaled = scaled.copy(x, y, target_size.width(), target_size.height())
+        if self._background_blur > 0:
+            scaled = self._cheap_blur(scaled, self._background_blur)
+        if self._background_opacity < 1.0:
+            overlay = QImage(scaled.size(), QImage.Format.Format_ARGB32_Premultiplied)
+            overlay.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(overlay)
+            painter.setOpacity(self._background_opacity)
+            painter.drawImage(0, 0, scaled)
+            painter.end()
+            scaled = overlay
+        self._background_pixmap = QPixmap.fromImage(scaled)
+
+    def _cheap_blur(self, image: QImage, radius: int) -> QImage:
+        factor = max(1, min(10, radius))
+        w = max(1, image.width() // factor)
+        h = max(1, image.height() // factor)
+        small = image.scaled(
+            w,
+            h,
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        return small.scaled(
+            image.width(),
+            image.height(),
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._background_image is not None:
+            self._rebuild_background_pixmap()
+
+    def paintEvent(self, event):
+        if self._background_pixmap:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            rect = self._container.geometry()
+            if rect.width() > 0 and rect.height() > 0:
+                t = theme_manager.current_theme
+                c = theme_manager.get_current_colors()
+                radius = t.border_radius + 4
+                path = QPainterPath()
+                path.addRoundedRect(QRectF(rect), float(radius), float(radius))
+                painter.fillPath(path, QColor(c.bg_primary))
+                painter.setClipPath(path)
+                painter.drawPixmap(rect, self._background_pixmap)
+            painter.end()
+        super().paintEvent(event)
+
     def set_user_avatar(self, avatar_path: str):
         """设置用户头像路径"""
         self._user_avatar_path = avatar_path
         if avatar_path and os.path.exists(avatar_path):
             pixmap = QPixmap(avatar_path)
             if not pixmap.isNull():
-                # 缩放为圆形头像
-                self._user_avatar_pixmap = pixmap.scaled(
-                    24,
-                    24,
-                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
+                # 保持原始分辨率，缩放由 _create_circular_avatar 统一处理
+                self._user_avatar_pixmap = pixmap
         else:
             self._user_avatar_pixmap = None
 
@@ -531,13 +685,8 @@ class CompactChatWindow(QWidget):
         if avatar_path and os.path.exists(avatar_path):
             pixmap = QPixmap(avatar_path)
             if not pixmap.isNull():
-                # 缩放为圆形头像
-                self._bot_avatar_pixmap = pixmap.scaled(
-                    24,
-                    24,
-                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
+                # 保持原始分辨率，缩放由 _create_circular_avatar 统一处理
+                self._bot_avatar_pixmap = pixmap
         else:
             self._bot_avatar_pixmap = None
 
@@ -1211,8 +1360,29 @@ class CompactChatWindow(QWidget):
                 self._display_user_text(text)
 
     def _create_circular_avatar(self, pixmap: QPixmap, size: int = 24) -> QPixmap:
-        """创建圆形头像"""
-        rounded_pixmap = QPixmap(size, size)
+        """创建圆形头像（支持高 DPI）"""
+        if pixmap.isNull():
+            return QPixmap()
+        
+        # 获取设备像素比以支持高 DPI 显示
+        dpr = QApplication.primaryScreen().devicePixelRatio() if QApplication.primaryScreen() else 1.0
+        actual_size = int(size * dpr)
+        
+        # 先将源图片缩放到目标尺寸（只做一次缩放，避免模糊）
+        scaled_source = pixmap.scaled(
+            actual_size,
+            actual_size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        
+        # 如果缩放后图片大于目标尺寸，居中裁剪
+        if scaled_source.width() > actual_size or scaled_source.height() > actual_size:
+            x = (scaled_source.width() - actual_size) // 2
+            y = (scaled_source.height() - actual_size) // 2
+            scaled_source = scaled_source.copy(x, y, actual_size, actual_size)
+        
+        rounded_pixmap = QPixmap(actual_size, actual_size)
         rounded_pixmap.fill(Qt.GlobalColor.transparent)
 
         painter = QPainter(rounded_pixmap)
@@ -1220,13 +1390,15 @@ class CompactChatWindow(QWidget):
 
         # 绘制圆形裁剪路径
         path = QPainterPath()
-        path.addEllipse(0, 0, size, size)
+        path.addEllipse(0, 0, actual_size, actual_size)
         painter.setClipPath(path)
 
         # 绘制头像
-        painter.drawPixmap(0, 0, size, size, pixmap)
+        painter.drawPixmap(0, 0, actual_size, actual_size, scaled_source)
         painter.end()
 
+        # 设置设备像素比，确保高 DPI 显示正确
+        rounded_pixmap.setDevicePixelRatio(dpr)
         return rounded_pixmap
 
     def add_ai_message(self, text: str, msg_type: str = "text"):
@@ -1405,10 +1577,28 @@ class CompactChatWindow(QWidget):
 
     def _update_geometry(self):
         """根据内容自适应调整窗口高度（仅在未手动调整大小时）"""
-        # 如果用户已经在调整大小，或者是初始显示，我们可能不需要强制调整
-        # 这里改为：如果内容很少，适应内容高度；如果内容很多，保持当前高度或最大高度
-        pass
-        # 移除强制 setFixedSize，允许用户调整
+        # 如果用户已经手动调整过大小，尊重用户的选择
+        if getattr(self, "_user_resized", False):
+            return
+        
+        # 计算内容所需的高度
+        content_height = self._history_widget.sizeHint().height()
+        input_height = self._input.sizeHint().height() + 40  # 输入框 + 边距
+        
+        # 最小和最大高度限制
+        min_height = 200
+        max_height = 600
+        
+        # 计算目标高度
+        target_height = min(max(content_height + input_height + 60, min_height), max_height)
+        
+        # 只在高度变化较大时调整（避免频繁闪烁）
+        current_height = self.height()
+        if abs(target_height - current_height) > 20:
+            self.setFixedHeight(target_height)
+        
+        # 更新布局
+        self.updateGeometry()
 
     def _scroll_to_bottom(self):
         scrollbar = self._scroll_area.verticalScrollBar()
@@ -1707,6 +1897,27 @@ class FloatingBallWindow(QWidget):
         if user_avatar_loaded or bot_avatar_loaded:
             # 使用更长的延迟确保头像已完全加载
             QTimer.singleShot(150, self._compact_window.reload_history_display)
+
+        # 从配置加载背景图设置
+        if hasattr(self.config, "appearance"):
+            appearance = getattr(self.config, "appearance")
+            bg_path = ""
+            bg_opacity = 0.3
+            bg_blur = 0
+            if hasattr(appearance, "background_image_path"):
+                bg_path = getattr(appearance, "background_image_path", "") or ""
+            elif isinstance(appearance, dict):
+                bg_path = appearance.get("background_image_path", "") or ""
+            if hasattr(appearance, "background_opacity"):
+                bg_opacity = getattr(appearance, "background_opacity", 0.3)
+            elif isinstance(appearance, dict):
+                bg_opacity = appearance.get("background_opacity", 0.3)
+            if hasattr(appearance, "background_blur"):
+                bg_blur = getattr(appearance, "background_blur", 0)
+            elif isinstance(appearance, dict):
+                bg_blur = appearance.get("background_blur", 0)
+            if bg_path:
+                self._compact_window.set_background_config(bg_path, bg_opacity, bg_blur)
 
         # 从配置加载自动隐藏设置
         if hasattr(self.config, "interaction"):
@@ -2331,6 +2542,38 @@ class FloatingBallWindow(QWidget):
     def has_unread_message(self) -> bool:
         """检查是否有未读消息"""
         return self._has_unread
+
+    def update_appearance_config(self, config) -> None:
+        """更新外观配置（热更新，无需重启）
+        
+        Args:
+            config: 包含 appearance 属性的配置对象
+        """
+        if not hasattr(config, "appearance"):
+            return
+        
+        appearance = config.appearance
+        
+        # 更新背景配置
+        bg_path = getattr(appearance, "background_image_path", "") or ""
+        bg_opacity = getattr(appearance, "background_opacity", 0.3)
+        bg_blur = getattr(appearance, "background_blur", 0)
+        self._compact_window.set_background_config(bg_path, bg_opacity, bg_blur)
+        
+        # 更新头像
+        user_avatar = getattr(appearance, "user_avatar_path", "") or ""
+        bot_avatar = getattr(appearance, "bot_avatar_path", "") or ""
+        if not bot_avatar:
+            bot_avatar = getattr(appearance, "avatar_path", "") or ""
+        
+        if user_avatar:
+            self._compact_window.set_user_avatar(user_avatar)
+        if bot_avatar:
+            self._compact_window.set_bot_avatar(bot_avatar)
+            self._load_avatar(bot_avatar)
+        
+        # 刷新历史记录显示以应用新头像
+        QTimer.singleShot(100, self._compact_window.reload_history_display)
 
     def showEvent(self, event):
         """窗口显示事件"""

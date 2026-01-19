@@ -483,9 +483,22 @@ class SettingsWindow(QWidget):
         self._ball_size.setSuffix(" px")
         ball_section.add_row("悬浮球大小", self._ball_size)
 
+        # 悬浮球透明度
+        self._ball_opacity = QDoubleSpinBox()
+        self._ball_opacity.setRange(0.2, 1.0)
+        self._ball_opacity.setSingleStep(0.1)
+        self._ball_opacity.setValue(0.9)
+        self._ball_opacity.setToolTip("悬浮球透明度，范围 0.2-1.0")
+        ball_section.add_row("悬浮球透明度", self._ball_opacity)
+
         # 呼吸灯效果
         self._breathing_enabled = QCheckBox("启用呼吸灯效果")
         self._breathing_enabled.setChecked(True)
+
+        # 悬浮球置顶
+        self._always_on_top = QCheckBox("悬浮球置顶")
+        self._always_on_top.setChecked(True)
+        ball_section.add_widget(self._always_on_top)
         ball_section.add_widget(self._breathing_enabled)
 
         layout.addWidget(ball_section)
@@ -514,6 +527,7 @@ class SettingsWindow(QWidget):
             }
         """)
         self._bg_image_preview.setText("无")
+        self._bg_image_path = ""
 
         bg_btns = QFrame()
         bg_btns_layout = QHBoxLayout(bg_btns)
@@ -1929,9 +1943,40 @@ class SettingsWindow(QWidget):
             # 开机自启 - 优先从注册表读取实际状态
             if os.name == "nt":
                 self._auto_start.setChecked(is_autostart_enabled())
+
+            # 悬浮球透明度
+            if hasattr(self.config.appearance, "ball_opacity"):
+                self._ball_opacity.setValue(self.config.appearance.ball_opacity)
+
+            # 悬浮球置顶
+            if hasattr(self.config.appearance, "always_on_top"):
+                self._always_on_top.setChecked(self.config.appearance.always_on_top)
+
+            # 背景图配置
+            if hasattr(self.config.appearance, "background_image_path"):
+                bg_path = self.config.appearance.background_image_path or ""
+                self._bg_image_path = bg_path
+                if bg_path and os.path.exists(bg_path):
+                    pixmap = QPixmap(bg_path)
+                    if not pixmap.isNull():
+                        pixmap = pixmap.scaled(
+                            80,
+                            60,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        self._bg_image_preview.setPixmap(pixmap)
+                        self._bg_image_preview.setText("")
+
+            if hasattr(self.config.appearance, "background_opacity"):
+                self._bg_opacity.setValue(self.config.appearance.background_opacity)
+
+            if hasattr(self.config.appearance, "background_blur"):
+                self._bg_blur.setValue(self.config.appearance.background_blur)
         else:
             self._user_avatar_path = ""
             self._bot_avatar_path = ""
+            self._bg_image_path = ""
 
         # 主题设置
         current_theme = theme_manager.current_theme.name
@@ -2349,8 +2394,13 @@ class SettingsWindow(QWidget):
                 "user_avatar_path": getattr(self, "_user_avatar_path", ""),
                 "bot_avatar_path": getattr(self, "_bot_avatar_path", ""),
                 "ball_size": self._ball_size.value(),
+                "ball_opacity": self._ball_opacity.value(),
                 "breathing_enabled": self._breathing_enabled.isChecked(),
+                "always_on_top": self._always_on_top.isChecked(),
                 "auto_start": self._auto_start.isChecked(),
+                "background_image_path": getattr(self, "_bg_image_path", ""),
+                "background_opacity": self._bg_opacity.value(),
+                "background_blur": self._bg_blur.value(),
             },
             "hotkeys": {
                 "global_enabled": self._global_hotkeys.isChecked(),
@@ -2420,10 +2470,21 @@ class SettingsWindow(QWidget):
                 "bot_avatar_path"
             ]
             self.config.appearance.ball_size = settings["appearance"]["ball_size"]
+            self.config.appearance.ball_opacity = settings["appearance"]["ball_opacity"]
             self.config.appearance.breathing_enabled = settings["appearance"][
                 "breathing_enabled"
             ]
+            self.config.appearance.always_on_top = settings["appearance"]["always_on_top"]
             self.config.appearance.auto_start = settings["appearance"]["auto_start"]
+            self.config.appearance.background_image_path = settings["appearance"][
+                "background_image_path"
+            ]
+            self.config.appearance.background_opacity = settings["appearance"][
+                "background_opacity"
+            ]
+            self.config.appearance.background_blur = settings["appearance"][
+                "background_blur"
+            ]
 
             # 快捷键
             self.config.hotkeys.global_enabled = settings["hotkeys"]["global_enabled"]

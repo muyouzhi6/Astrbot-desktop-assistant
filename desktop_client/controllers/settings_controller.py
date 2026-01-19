@@ -182,6 +182,19 @@ class SettingsController(QObject):
             if self._floating_ball:
                 self._floating_ball.set_breathing(appearance["breathing_enabled"])
 
+        # 背景配置热更新
+        if "background_image_path" in appearance:
+            self._config.appearance.background_image_path = appearance["background_image_path"]
+        if "background_opacity" in appearance:
+            self._config.appearance.background_opacity = appearance["background_opacity"]
+        if "background_blur" in appearance:
+            self._config.appearance.background_blur = appearance["background_blur"]
+        
+        # 如果有任何背景相关配置变化，通知悬浮球更新
+        if any(key in appearance for key in ["background_image_path", "background_opacity", "background_blur"]):
+            if self._floating_ball and hasattr(self._floating_ball, "update_appearance_config"):
+                self._floating_ball.update_appearance_config(self._config)
+
     def _update_hotkey_settings(self, hotkeys: Dict[str, Any]) -> None:
         """
         更新快捷键配置
