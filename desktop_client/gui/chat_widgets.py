@@ -288,6 +288,8 @@ class VideoMessageWidget(QFrame):
         video_path: str,
         thumbnail_path: str = "",
         duration: float = 0,
+        max_width: int = 240,
+        max_height: int = 180,
         parent=None,
     ):
         super().__init__(parent)
@@ -304,21 +306,21 @@ class VideoMessageWidget(QFrame):
 
         # 缩略图容器
         self._thumbnail_container = QWidget()
-        self._thumbnail_container.setFixedSize(200, 150)
+        self._thumbnail_container.setFixedSize(max_width, max_height)
         thumb_layout = QVBoxLayout(self._thumbnail_container)
         thumb_layout.setContentsMargins(0, 0, 0, 0)
 
         # 缩略图
         self._thumbnail_label = QLabel()
         self._thumbnail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._thumbnail_label.setFixedSize(200, 150)
+        self._thumbnail_label.setFixedSize(max_width, max_height)
 
         if thumbnail_path and os.path.exists(thumbnail_path):
             pixmap = QPixmap(thumbnail_path)
             if not pixmap.isNull():
                 scaled = pixmap.scaled(
-                    200,
-                    150,
+                    max_width,
+                    max_height,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -339,14 +341,17 @@ class VideoMessageWidget(QFrame):
         self._play_overlay.setFixedSize(50, 50)
         # 将播放按钮居中放置在缩略图上
         self._play_overlay.setParent(self._thumbnail_container)
-        self._play_overlay.move(75, 50)
+        self._play_overlay.move(
+            (max_width - 50) // 2,
+            (max_height - 50) // 2,
+        )
 
         # 时长标签
         if duration > 0:
             self._duration_label = QLabel(format_duration(duration))
             self._duration_label.setObjectName("videoDuration")
             self._duration_label.setParent(self._thumbnail_container)
-            self._duration_label.move(160, 130)
+            self._duration_label.move(max_width - 45, max_height - 22)
 
         self._apply_theme()
         theme_manager.register_callback(self._on_theme_changed)
@@ -629,10 +634,12 @@ class ClickableImageLabel(QLabel):
             }}
         """)
 
-        copy_action = menu.addAction("📋 复制图片")
+        copy_action = menu.addAction("复制图片")
+        copy_action.setIcon(icon_manager.get_icon("copy", c.text_primary, 14))
         copy_action.triggered.connect(self._copy_to_clipboard)
 
-        view_action = menu.addAction("🔍 查看大图")
+        view_action = menu.addAction("查看大图")
+        view_action.setIcon(icon_manager.get_icon("zoom-in", c.text_primary, 14))
         view_action.triggered.connect(self._show_preview)
 
         menu.exec(self.mapToGlobal(pos))
@@ -727,15 +734,19 @@ class ImagePreviewDialog(QDialog):
         btn_layout.setContentsMargins(12, 8, 12, 8)
 
         # 复制按钮
-        copy_btn = QPushButton("📋 复制到剪贴板")
+        copy_btn = QPushButton("复制到剪贴板")
+        c = theme_manager.get_current_colors()
+        copy_btn.setIcon(icon_manager.get_icon("copy", c.text_primary, 14))
         copy_btn.clicked.connect(self._copy_to_clipboard)
 
         # 下载按钮
-        download_btn = QPushButton("💾 下载图片")
+        download_btn = QPushButton("下载图片")
+        download_btn.setIcon(icon_manager.get_icon("download", c.text_primary, 14))
         download_btn.clicked.connect(self._download_image)
 
         # 适应窗口按钮
-        fit_btn = QPushButton("📐 适应窗口")
+        fit_btn = QPushButton("适应窗口")
+        fit_btn.setIcon(icon_manager.get_icon("maximize", c.text_primary, 14))
         fit_btn.clicked.connect(self._fit_to_window)
 
         # 原始大小按钮

@@ -7,9 +7,50 @@
 import json
 import os
 import threading
+import base64
+import hashlib
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 from pathlib import Path
+
+
+# ============ 敏感信息加密/解密 ============
+
+def _get_machine_key() -> bytes:
+    """获取基于机器信息的密钥（不可逆，用于混淆）"""
+    # 使用用户名 + 主机名作为密钥种子，确保不同机器不同密钥
+    seed = f"{os.getenv('USERNAME', os.getenv('USER', 'default'))}@{os.getenv('COMPUTERNAME', os.getenv('HOSTNAME', 'local'))}"
+    return hashlib.sha256(seed.encode()).digest()
+
+
+def _obfuscate(plaintext: str) -> str:
+    """混淆敏感字符串（非军用级加密，但防止明文泄露）"""
+    if not plaintext:
+        return ""
+    key = _get_machine_key()
+    data = plaintext.encode("utf-8")
+    # XOR 混淆
+    obfuscated = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+    # 加上前缀标记，方便识别已混淆的数据
+    return "obf:" + base64.b64encode(obfuscated).decode("ascii")
+
+
+def _deobfuscate(obfuscated: str) -> str:
+    """解混淆敏感字符串"""
+    if not obfuscated:
+        return ""
+    # 未混淆的旧数据（向后兼容）
+    if not obfuscated.startswith("obf:"):
+        return obfuscated
+    try:
+        key = _get_machine_key()
+        data = base64.b64decode(obfuscated[4:])
+        plaintext = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+        return plaintext.decode("utf-8")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"解混淆失败: {e}")
+        return ""
 
 
 @dataclass
@@ -385,13 +426,18 @@ class ClientConfig:
                 data = json.load(f)
 
             logger.debug(
-                f"成功读取配置文件，内容: {json.dumps(data.get('server', {}), ensure_ascii=False)}"
+                f"成功读取配置文件: server.url={data.get('server', {}).get('url', 'N/A')}"
             )
 
             config = cls()
 
             # 加载服务器配置
             if "server" in data:
+                # 解密敏感字段
+                if "password" in data["server"]:
+                    data["server"]["password"] = _deobfuscate(data["server"]["password"])
+                if "token" in data["server"] and data["server"]["token"]:
+                    data["server"]["token"] = _deobfuscate(data["server"]["token"])
                 for key, value in data["server"].items():
                     if hasattr(config.server, key):
                         setattr(config.server, key, value)
@@ -506,9 +552,11 @@ class ClientConfig:
                     "session_id": self.session_id,
                 }
 
-                # 不保存密码和 token 的明文（可选：加密存储）
-                # 这里简单处理，不保存敏感信息
-                # data['server']['password'] = ""  # 可选：不保存密码
+                # 加密敏感信息（密码和 token 不明文存储）
+                if data["server"].get("password"):
+                    data["server"]["password"] = _obfuscate(data["server"]["password"])
+                if data["server"].get("token"):
+                    data["server"]["token"] = _obfuscate(data["server"]["token"])
 
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)

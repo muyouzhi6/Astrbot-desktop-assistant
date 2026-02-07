@@ -55,7 +55,7 @@ class ColorPickerButton(QPushButton):
     def __init__(self, color: str = "", parent=None):
         super().__init__(parent)
         self._color = color
-        self.setFixedSize(30, 30)
+        self.setFixedSize(36, 36)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clicked.connect(self._on_click)
         self._update_style()

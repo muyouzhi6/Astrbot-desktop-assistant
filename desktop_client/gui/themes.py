@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, TYPE_CHECKING
 from enum import Enum
 import copy
+import weakref
 import logging
 
 logger = logging.getLogger(__name__)
@@ -544,21 +545,35 @@ class ThemeManager:
         return [(name, theme.display_name) for name, theme in PRESET_THEMES.items()]
 
     def register_callback(self, callback):
-        """注册主题变化回调"""
-        self._callbacks.append(callback)
+        """注册主题变化回调（使用弱引用，组件销毁后自动清理）"""
+        # 对绑定方法使用 WeakMethod，对普通函数使用 ref
+        if hasattr(callback, '__self__'):
+            ref = weakref.WeakMethod(callback)
+        else:
+            ref = weakref.ref(callback)
+        self._callbacks.append(ref)
 
     def unregister_callback(self, callback):
         """取消注册回调"""
-        if callback in self._callbacks:
-            self._callbacks.remove(callback)
+        new_callbacks = []
+        for ref in self._callbacks:
+            cb = ref()
+            if cb is not None and cb != callback:
+                new_callbacks.append(ref)
+        self._callbacks = new_callbacks
 
     def _notify_callbacks(self):
-        """通知所有回调"""
-        for callback in self._callbacks:
-            try:
-                callback(self._current_theme)
-            except Exception as e:
-                logger.error(f"Theme callback error: {e}")
+        """通知所有回调（自动清理已失效的弱引用）"""
+        alive_callbacks = []
+        for ref in self._callbacks:
+            cb = ref()
+            if cb is not None:
+                try:
+                    cb(self._current_theme)
+                except Exception as e:
+                    logger.error(f"Theme callback error: {e}")
+                alive_callbacks.append(ref)
+        self._callbacks = alive_callbacks
 
     # ============ QSS 支持方法 ============
 

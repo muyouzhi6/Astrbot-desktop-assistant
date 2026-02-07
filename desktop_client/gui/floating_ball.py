@@ -239,24 +239,47 @@ class CompactChatWindow(QWidget):
 
         # 容器内布局
         container_layout = QVBoxLayout(self._container)
-        # 增加边距以便更容易拖动（虽然这里是内部布局，外部调整大小靠鼠标事件）
-        container_layout.setContentsMargins(12, 12, 12, 12)
-        container_layout.setSpacing(8)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
 
-        # 1. 顶部栏 (关闭按钮)
-        top_bar = QHBoxLayout()
-        top_bar.setContentsMargins(0, 0, 0, 0)
+        # 1. 标题栏（可拖拽区域）
+        self._title_bar = QFrame()
+        self._title_bar.setObjectName("compactTitleBar")
+        self._title_bar.setFixedHeight(40)
+        self._title_bar.setCursor(Qt.CursorShape.OpenHandCursor)
+        title_bar_layout = QHBoxLayout(self._title_bar)
+        title_bar_layout.setContentsMargins(12, 0, 8, 0)
+        title_bar_layout.setSpacing(8)
 
-        top_bar.addStretch()
+        self._title_label = QLabel("AstrBot")
+        self._title_label.setObjectName("compactTitleLabel")
+        title_bar_layout.addWidget(self._title_label)
 
-        self._close_btn = QPushButton("×")
+        title_bar_layout.addStretch()
+
+        # 清空对话按钮
+        self._clear_btn = QPushButton()
+        self._clear_btn.setObjectName("compactClearBtn")
+        self._clear_btn.setFixedSize(24, 24)
+        self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear_btn.setToolTip("清空对话")
+        self._clear_btn.clicked.connect(self._on_clear_history)
+        title_bar_layout.addWidget(self._clear_btn)
+
+        self._close_btn = QPushButton()
         self._close_btn.setObjectName("compactCloseBtn")
         self._close_btn.setFixedSize(24, 24)
         self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._close_btn.clicked.connect(self._on_close)
-        top_bar.addWidget(self._close_btn)
+        title_bar_layout.addWidget(self._close_btn)
 
-        container_layout.addLayout(top_bar)
+        container_layout.addWidget(self._title_bar)
+
+        # 2. 内容区域（带内边距）
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(12, 4, 12, 12)
+        content_layout.setSpacing(8)
 
         # 2. 消息历史区域
         self._scroll_area = QScrollArea()
@@ -305,7 +328,7 @@ class CompactChatWindow(QWidget):
         self._history_layout.addStretch(1)
 
         self._scroll_area.setWidget(self._history_widget)
-        container_layout.addWidget(self._scroll_area)
+        content_layout.addWidget(self._scroll_area)
 
         # 3. 附件预览区 (隐藏)
         self._preview_frame = QFrame()
@@ -328,7 +351,7 @@ class CompactChatWindow(QWidget):
         preview_layout.addWidget(self._preview_label)
         preview_layout.addWidget(self._remove_attachment_btn)
         preview_layout.addStretch()
-        container_layout.addWidget(self._preview_frame)
+        content_layout.addWidget(self._preview_frame)
 
         # 4. 输入框 + 发送按钮
         input_layout = QHBoxLayout()
@@ -345,10 +368,12 @@ class CompactChatWindow(QWidget):
 
         self._input = PasteAwareTextEdit()
         self._input.setPlaceholderText("输入消息...")
-        self._input.setFixedHeight(40)
+        self._input.setMinimumHeight(40)
+        self._input.setMaximumHeight(120)
         self._input.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
+        self._input.textChanged.connect(self._adjust_input_height)
         self._input.image_pasted.connect(self.set_attachment)
         self._input.enter_pressed.connect(self._send)
         input_layout.addWidget(self._input)
@@ -360,7 +385,9 @@ class CompactChatWindow(QWidget):
         self._send_btn.clicked.connect(self._send)
         input_layout.addWidget(self._send_btn)
 
-        container_layout.addLayout(input_layout)
+        content_layout.addLayout(input_layout)
+
+        container_layout.addWidget(content_widget)
 
         # 启用鼠标追踪以支持边缘检测
         self.setMouseTracking(True)
@@ -415,22 +442,50 @@ class CompactChatWindow(QWidget):
                 }}
             """)
 
-        # 关闭按钮
+        # 标题栏
+        self._title_bar.setStyleSheet(f"""
+            QFrame#compactTitleBar {{
+                background-color: {c.bg_secondary};
+                border-top-left-radius: {t.border_radius + 4}px;
+                border-top-right-radius: {t.border_radius + 4}px;
+                border-bottom: 1px solid {c.border_light};
+            }}
+            QLabel#compactTitleLabel {{
+                color: {c.text_primary};
+                font-family: {t.font_family};
+                font-size: {t.font_size_base}px;
+                font-weight: bold;
+                background: transparent;
+            }}
+        """)
+
+        # 关闭按钮（使用图标）
         self._close_btn.setStyleSheet(f"""
             QPushButton#compactCloseBtn {{
                 background: transparent;
-                color: {c.text_secondary};
                 border: none;
                 border-radius: 12px;
-                font-size: 16px;
-                font-weight: bold;
-                padding-bottom: 2px;
             }}
             QPushButton#compactCloseBtn:hover {{
                 background-color: #ff4d4f;
-                color: white;
             }}
         """)
+        self._close_btn.setIcon(icon_manager.get_icon("close", c.text_secondary, 14))
+        self._close_btn.setIconSize(QSize(14, 14))
+
+        # 清空对话按钮
+        self._clear_btn.setStyleSheet(f"""
+            QPushButton#compactClearBtn {{
+                background: transparent;
+                border: none;
+                border-radius: 12px;
+            }}
+            QPushButton#compactClearBtn:hover {{
+                background-color: {c.bg_hover};
+            }}
+        """)
+        self._clear_btn.setIcon(icon_manager.get_icon("trash", c.text_secondary, 14))
+        self._clear_btn.setIconSize(QSize(14, 14))
 
         # 滚动区
         self._scroll_area.setStyleSheet(f"""
@@ -1244,6 +1299,17 @@ class CompactChatWindow(QWidget):
     def _on_close(self):
         self.hide()
         self.closed.emit()
+
+    def _on_clear_history(self):
+        """清空对话记录"""
+        self._chat_history.clear_history()
+
+    def _adjust_input_height(self):
+        """根据输入内容自动调整输入框高度"""
+        doc = self._input.document()
+        doc_height = int(doc.size().height()) + 10  # 加上内边距
+        new_height = max(40, min(120, doc_height))
+        self._input.setFixedHeight(new_height)
 
     def set_attachment(self, path: str):
         if not path or not os.path.exists(path):
