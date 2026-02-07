@@ -191,16 +191,20 @@ class DesktopClientApp(QObject):
         if self._app:
             self._app.setQuitOnLastWindowClosed(False)
 
-        # 2. 启用 QSS 主题系统并设置 macOS 风格
+        # 2. 启用 QSS 主题系统并从配置加载主题
         logger.info("启用 QSS 主题系统")
         from .gui.themes import theme_manager
 
         theme_manager.enable_qss_mode(True)
-        theme_manager.set_theme("macos_light")  # 设置 macOS 浅色主题
+        # 从配置加载保存的主题，如果没有则使用默认主题
+        saved_theme = "macos_light"  # 默认主题
+        if hasattr(self.config, "appearance") and self.config.appearance.theme:
+            saved_theme = self.config.appearance.theme
+        theme_manager.set_theme(saved_theme)
         if self._app:
             theme_manager.apply_global_stylesheet(self._app)
         logger.info(
-            f"已启用 macOS 主题，QSS 长度：{len(theme_manager.get_global_qss())}"
+            f"已启用主题 '{saved_theme}'，QSS 长度：{len(theme_manager.get_global_qss())}"
         )
 
         # 3. 设置 qasync 事件循环

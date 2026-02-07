@@ -600,7 +600,9 @@ class ClickableImageLabel(QLabel):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
             self._show_preview()
-        super().mousePressEvent(event)
+            event.accept()  # 阻止事件冒泡，防止触发父窗口的拖拽
+        else:
+            super().mousePressEvent(event)
 
     def _show_context_menu(self, pos):
         """显示右键菜单"""
