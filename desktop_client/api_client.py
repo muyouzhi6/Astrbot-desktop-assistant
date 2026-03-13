@@ -1665,9 +1665,17 @@ class AstrBotApiClient:
                             event_data = json.loads(data_str)
                             event_type = event_data.get("type", "plain")
 
+                            raw_data = event_data.get("data")
+                            if raw_data is None:
+                                data_value = ""
+                            elif not isinstance(raw_data,str):
+                                data_value = str(raw_data)
+                            else:
+                                data_value = raw_data
+
                             event = SSEEvent(
                                 event_type=event_type,
-                                data=event_data.get("data", ""),
+                                data=data_value,
                                 streaming=event_data.get("streaming", False),
                                 chain_type=event_data.get("chain_type", "normal"),
                                 raw=event_data,
