@@ -16,7 +16,7 @@ AstrBot 桌面助手独立客户端
     client.run()
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "AstrBot Team"
 
 from .config import (

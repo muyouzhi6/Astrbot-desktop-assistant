@@ -1,7 +1,7 @@
 #!/bin/bash
 # =====================================================
 # AstrBot Desktop Assistant - 通用启动脚本
-# 
+#
 # 适用于 Linux 和 macOS
 # 在终端中运行: ./start.sh
 # =====================================================
@@ -17,7 +17,7 @@ OS_TYPE="$(uname -s)"
 case "$OS_TYPE" in
     Darwin*)    OS_NAME="macOS" ;;
     Linux*)     OS_NAME="Linux" ;;
-    MINGW*|MSYS*|CYGWIN*)    
+    MINGW*|MSYS*|CYGWIN*)
         echo "Windows 用户请使用 start.bat 启动"
         exit 1
         ;;
@@ -51,7 +51,7 @@ print_error() {
 # 检查 Python 版本
 check_python() {
     print_info "检查 Python 环境..."
-    
+
     # 优先使用 python3
     if command -v python3 &> /dev/null; then
         PYTHON_CMD="python3"
@@ -68,17 +68,17 @@ check_python() {
         fi
         exit 1
     fi
-    
+
     # 检查版本
     PYTHON_VERSION=$($PYTHON_CMD -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
     PYTHON_MAJOR=$($PYTHON_CMD -c "import sys; print(sys.version_info.major)")
     PYTHON_MINOR=$($PYTHON_CMD -c "import sys; print(sys.version_info.minor)")
-    
+
     if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]); then
         print_error "Python 版本过低！需要 Python 3.10 或更高版本，当前版本: $PYTHON_VERSION"
         exit 1
     fi
-    
+
     print_success "Python 版本: $PYTHON_VERSION ✓"
 }
 
@@ -87,20 +87,20 @@ check_linux_deps() {
     if [ "$OS_NAME" != "Linux" ]; then
         return
     fi
-    
+
     print_info "检查系统依赖..."
-    
+
     MISSING_DEPS=""
-    
+
     # 检查 Qt 相关依赖
     if ! ldconfig -p 2>/dev/null | grep -q libGL.so; then
         MISSING_DEPS="$MISSING_DEPS libgl1-mesa-glx"
     fi
-    
+
     if ! ldconfig -p 2>/dev/null | grep -q libxcb.so; then
         MISSING_DEPS="$MISSING_DEPS libxcb-xinerama0"
     fi
-    
+
     if [ -n "$MISSING_DEPS" ]; then
         print_warning "可能缺少以下系统依赖: $MISSING_DEPS"
         print_info "Ubuntu/Debian 安装命令: sudo apt install$MISSING_DEPS libxcb-cursor0 libegl1"
@@ -111,8 +111,12 @@ check_linux_deps() {
 
 # 设置虚拟环境
 setup_venv() {
-    VENV_DIR="$SCRIPT_DIR/.venv"
-    
+    VENV_DIR="$SCRIPT_DIR/venv"
+    # 复用旧版启动脚本创建的环境，避免重复下载依赖。
+    if [ ! -f "$VENV_DIR/bin/python" ] && [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+        VENV_DIR="$SCRIPT_DIR/.venv"
+    fi
+
     if [ ! -d "$VENV_DIR" ]; then
         print_info "创建虚拟环境..."
         $PYTHON_CMD -m venv "$VENV_DIR"
@@ -120,9 +124,9 @@ setup_venv() {
         NEED_INSTALL=true
     else
         print_info "使用已存在的虚拟环境"
-        NEED_INSTALL=false
+        NEED_INSTALL=${REINSTALL:-false}
     fi
-    
+
     # 激活虚拟环境
     source "$VENV_DIR/bin/activate"
     print_success "虚拟环境已激活 ✓"
@@ -132,10 +136,10 @@ setup_venv() {
 install_dependencies() {
     if [ "$NEED_INSTALL" = true ] || [ ! -f "$VENV_DIR/.installed" ]; then
         print_info "安装依赖..."
-        
+
         # 升级 pip
         pip install --upgrade pip -q
-        
+
         # 安装依赖
         if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
             pip install -r "$SCRIPT_DIR/requirements.txt" -q
@@ -144,7 +148,7 @@ install_dependencies() {
             print_error "未找到 requirements.txt 文件！"
             exit 1
         fi
-        
+
         # 标记已安装
         touch "$VENV_DIR/.installed"
     else
@@ -156,7 +160,7 @@ install_dependencies() {
 check_config() {
     CONFIG_FILE="$SCRIPT_DIR/desktop_client/config.yaml"
     CONFIG_EXAMPLE="$SCRIPT_DIR/desktop_client/config.example.yaml"
-    
+
     if [ ! -f "$CONFIG_FILE" ]; then
         if [ -f "$CONFIG_EXAMPLE" ]; then
             print_warning "配置文件不存在，从示例文件创建..."
@@ -181,7 +185,7 @@ start_app() {
     echo "  按 Ctrl+C 退出"
     echo "======================================"
     echo ""
-    
+
     # 设置 Qt 环境变量（解决某些 Linux 发行版的问题）
     if [ "$OS_NAME" = "Linux" ]; then
         export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
@@ -190,10 +194,10 @@ start_app() {
             export QT_QPA_PLATFORM="wayland;xcb"
         fi
     fi
-    
+
     # 启动应用
     python -m desktop_client
-    
+
     EXIT_CODE=$?
     if [ $EXIT_CODE -ne 0 ]; then
         print_error "应用程序异常退出 (退出码: $EXIT_CODE)"
@@ -223,8 +227,7 @@ main() {
                 exit 0
                 ;;
             --reinstall)
-                NEED_INSTALL=true
-                rm -f "$SCRIPT_DIR/.venv/.installed" 2>/dev/null || true
+                REINSTALL=true
                 shift
                 ;;
             --check)
@@ -238,25 +241,25 @@ main() {
                 ;;
         esac
     done
-    
+
     echo ""
     echo "======================================"
     echo "  AstrBot Desktop Assistant Launcher"
     echo "  Operating System: $OS_NAME"
     echo "======================================"
     echo ""
-    
+
     check_python
     check_linux_deps
     setup_venv
     install_dependencies
     check_config
-    
+
     if [ "${CHECK_ONLY:-false}" = true ]; then
         print_success "环境检查完成！"
         exit 0
     fi
-    
+
     start_app
 }
 

@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-desktop-client"
-version = "1.0.0"
+version = "1.0.1"
 description = "AstrBot Desktop Assistant Client"
 requires-python = ">=3.10"
 

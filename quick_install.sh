@@ -74,12 +74,12 @@ else
     echo ""
     echo -e "${CYAN}正在自动测试加速代理，请稍候...${NC}"
     echo ""
-    
+
     MIN_TIME=9999
-    
+
     for host in "${PROXY_HOSTS[@]}"; do
         echo -n "  测试 $host ... "
-        
+
         # 使用 ping 测试延迟
         if ping -c 1 -W 3 "$host" &>/dev/null; then
             # 获取延迟时间
@@ -87,7 +87,7 @@ else
             if [[ -n "$latency" ]]; then
                 latency_int=${latency%.*}
                 echo -e "${GREEN}✓ 可用 (${latency} ms)${NC}"
-                
+
                 if [[ $latency_int -lt $MIN_TIME ]]; then
                     MIN_TIME=$latency_int
                     BEST_PROXY="$host"
@@ -102,7 +102,7 @@ else
             echo -e "${RED}✗ 不可用${NC}"
         fi
     done
-    
+
     if [[ -n "$BEST_PROXY" ]]; then
         echo ""
         echo -e "${GREEN}✓ 已选择最快代理: $BEST_PROXY${NC}"
@@ -126,7 +126,7 @@ if ! command -v git &>/dev/null; then
     echo -e "${RED}║  ✗ 未检测到 Git，请先安装 Git 后重试                                 ║${NC}"
     echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
     echo -e "${RED}║                                                                      ║${NC}"
-    
+
     if [[ "$OS" == "macos" ]]; then
         echo -e "${RED}║  macOS 安装方式：                                                    ║${NC}"
         echo -e "${RED}║    方式1: xcode-select --install                                    ║${NC}"
@@ -137,7 +137,7 @@ if ! command -v git &>/dev/null; then
         echo -e "${RED}║    CentOS/RHEL: sudo yum install git                                ║${NC}"
         echo -e "${RED}║    Arch: sudo pacman -S git                                         ║${NC}"
     fi
-    
+
     echo -e "${RED}║                                                                      ║${NC}"
     echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -162,7 +162,7 @@ for cmd in python3 python; do
         version=$($cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
         major=$(echo $version | cut -d. -f1)
         minor=$(echo $version | cut -d. -f2)
-        
+
         if [[ $major -ge 3 && $minor -ge 10 ]]; then
             PYTHON_CMD=$cmd
             echo -e "${GREEN}✓ Python $($cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+') 已安装${NC}"
@@ -177,7 +177,7 @@ if [[ -z "$PYTHON_CMD" ]]; then
     echo -e "${RED}║  ✗ 未检测到 Python 3.10+，请先安装 Python 后重试                     ║${NC}"
     echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
     echo -e "${RED}║                                                                      ║${NC}"
-    
+
     if [[ "$OS" == "macos" ]]; then
         echo -e "${RED}║  macOS 安装方式：                                                    ║${NC}"
         echo -e "${RED}║    方式1 (Homebrew): brew install python@3.11                       ║${NC}"
@@ -188,7 +188,7 @@ if [[ -z "$PYTHON_CMD" ]]; then
         echo -e "${RED}║    CentOS/RHEL: sudo dnf install python3.11                        ║${NC}"
         echo -e "${RED}║    Arch: sudo pacman -S python                                     ║${NC}"
     fi
-    
+
     echo -e "${RED}║                                                                      ║${NC}"
     echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -202,13 +202,13 @@ clone_project() {
     echo "正在下载项目（使用浅克隆加速）..."
     echo "下载地址: $CLONE_URL"
     echo ""
-    
+
     if git clone --depth 1 "$CLONE_URL" "$PROJECT_DIR"; then
         echo -e "${GREEN}✓ 项目下载完成${NC}"
     else
         echo ""
         echo -e "${YELLOW}⚠ 下载失败，尝试直连 GitHub...${NC}"
-        
+
         if git clone --depth 1 "$GITHUB_REPO" "$PROJECT_DIR"; then
             echo -e "${GREEN}✓ 项目下载完成（直连）${NC}"
         else
@@ -229,7 +229,7 @@ PROJECT_DIR="$INSTALL_DIR/Astrbot-desktop-assistant"
 if [[ -d "$PROJECT_DIR/.git" ]]; then
     echo "检测到已有项目，正在更新..."
     cd "$PROJECT_DIR"
-    
+
     if git pull; then
         echo -e "${GREEN}✓ 项目更新完成${NC}"
     else
@@ -262,13 +262,16 @@ echo ""
 echo -e "${CYAN}[4/6]${NC} 配置 Python 环境..."
 
 VENV_DIR="$PROJECT_DIR/venv"
+if [[ ! -f "$VENV_DIR/bin/python" && -f "$PROJECT_DIR/.venv/bin/python" ]]; then
+    VENV_DIR="$PROJECT_DIR/.venv"
+fi
 
 if [[ -f "$VENV_DIR/bin/python" ]]; then
     echo -e "${GREEN}✓ 虚拟环境已存在${NC}"
 else
     echo "正在创建虚拟环境..."
     $PYTHON_CMD -m venv "$VENV_DIR"
-    
+
     if [[ $? -eq 0 ]]; then
         echo -e "${GREEN}✓ 虚拟环境创建成功${NC}"
     else
@@ -292,7 +295,7 @@ echo -e "${CYAN}[5/6]${NC} 安装依赖包（这可能需要几分钟）..."
 
 if [[ $? -ne 0 ]]; then
     echo -e "${YELLOW}⚠ 部分依赖安装失败，尝试逐个安装核心依赖...${NC}"
-    
+
     for dep in "PySide6>=6.5.0" "qasync>=0.27.1" "httpx[http2]>=0.24.0" "websockets>=11.0.0" "Pillow>=9.0.0" "mss>=9.0.0" "pynput>=1.7.0"; do
         echo "  安装 $dep..."
         "$PYTHON_CMD" -m pip install "$dep" -q 2>/dev/null
@@ -318,27 +321,27 @@ fi
 if [[ "$OS" == "macos" ]]; then
     # 创建桌面快捷方式
     LAUNCH_SCRIPT="$PROJECT_DIR/AstrBot Desktop Assistant.command"
-    
+
     cat > "$LAUNCH_SCRIPT" << EOF
 #!/bin/bash
 cd "$PROJECT_DIR"
 "$PYTHON_PATH" -m desktop_client
 EOF
-    
+
     chmod +x "$LAUNCH_SCRIPT"
-    
+
     DESKTOP="$HOME/Desktop"
     if [[ -d "$DESKTOP" ]]; then
         cp "$LAUNCH_SCRIPT" "$DESKTOP/"
         echo -e "${GREEN}✓ 桌面快捷方式已创建${NC}"
     fi
-    
+
     # 配置开机自启
     PLIST_DIR="$HOME/Library/LaunchAgents"
     PLIST_FILE="$PLIST_DIR/com.astrbot.desktop-assistant.plist"
-    
+
     mkdir -p "$PLIST_DIR"
-    
+
     cat > "$PLIST_FILE" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -362,10 +365,10 @@ EOF
 </dict>
 </plist>
 EOF
-    
+
     launchctl unload "$PLIST_FILE" 2>/dev/null
     launchctl load "$PLIST_FILE" 2>/dev/null
-    
+
     if [[ $? -eq 0 ]]; then
         echo -e "${GREEN}✓ 开机自启已配置${NC}"
     else
@@ -376,10 +379,10 @@ EOF
 else
     # 创建桌面快捷方式
     DESKTOP=$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")
-    
+
     if [[ -d "$DESKTOP" ]]; then
         DESKTOP_FILE="$DESKTOP/astrbot-desktop-assistant.desktop"
-        
+
         cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
 Type=Application
@@ -391,19 +394,19 @@ Terminal=false
 Icon=$PROJECT_DIR/desktop_client/resources/icon.png
 Categories=Utility;
 EOF
-        
+
         chmod +x "$DESKTOP_FILE"
         gio set "$DESKTOP_FILE" "metadata::trusted" true 2>/dev/null
-        
+
         echo -e "${GREEN}✓ 桌面快捷方式已创建${NC}"
     fi
-    
+
     # 配置开机自启
     AUTOSTART_DIR="$HOME/.config/autostart"
     mkdir -p "$AUTOSTART_DIR"
-    
+
     AUTOSTART_FILE="$AUTOSTART_DIR/astrbot-desktop-assistant.desktop"
-    
+
     cat > "$AUTOSTART_FILE" << EOF
 [Desktop Entry]
 Type=Application
@@ -415,9 +418,9 @@ Terminal=false
 StartupNotify=false
 X-GNOME-Autostart-enabled=true
 EOF
-    
+
     chmod +x "$AUTOSTART_FILE"
-    
+
     if [[ -f "$AUTOSTART_FILE" ]]; then
         echo -e "${GREEN}✓ 开机自启已配置${NC}"
     else

@@ -141,10 +141,10 @@ else
     echo ""
     echo -e "${CYAN}正在自动测试加速代理，请稍候...${NC}"
     echo ""
-    
+
     for host in "${PROXY_HOSTS[@]}"; do
         echo -n "  测试 $host ... "
-        
+
         if ping -c 1 -W 3 "$host" &>/dev/null; then
             echo -e "${GREEN}✓ 可用${NC}"
             if [[ -z "$BEST_PROXY" ]]; then
@@ -154,11 +154,11 @@ else
             echo -e "${RED}✗ 不可用${NC}"
         fi
     done
-    
+
     if [[ -n "$BEST_PROXY" ]]; then
         echo ""
         echo -e "${GREEN}✓ 已选择代理: $BEST_PROXY${NC}"
-        
+
         # 配置 Git 代理
         git config --local url."https://$BEST_PROXY/https://github.com".insteadOf "https://github.com"
     else
@@ -192,7 +192,7 @@ if [[ "$UPDATE_MODE" == "release" ]]; then
         echo -e "${RED}✗ 获取标签失败${NC}"
         update_failed
     fi
-    
+
     # 检查目标版本是否存在
     if ! git tag -l "$TARGET_VERSION" | grep -q .; then
         echo -e "${RED}✗ 版本 $TARGET_VERSION 不存在${NC}"
@@ -201,7 +201,7 @@ if [[ "$UPDATE_MODE" == "release" ]]; then
         git tag -l --sort=-v:refname | head -10 2>/dev/null
         update_failed
     fi
-    
+
     # 切换到指定版本
     echo "正在切换到版本 $TARGET_VERSION..."
     if ! git checkout "$TARGET_VERSION" 2>/dev/null; then
@@ -211,9 +211,9 @@ if [[ "$UPDATE_MODE" == "release" ]]; then
             update_failed
         fi
     fi
-    
+
     echo -e "${GREEN}✓ 已切换到版本 $TARGET_VERSION${NC}"
-    
+
 else
     # ========================================================================
     # Git 模式：拉取最新代码
@@ -275,13 +275,15 @@ PYTHON_CMD=""
 
 if [[ -f "$PROJECT_DIR/venv/bin/python" ]]; then
     PYTHON_CMD="$PROJECT_DIR/venv/bin/python"
+elif [[ -f "$PROJECT_DIR/.venv/bin/python" ]]; then
+    PYTHON_CMD="$PROJECT_DIR/.venv/bin/python"
 else
     for cmd in python3 python; do
         if command -v $cmd &>/dev/null; then
             version=$($cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+')
             major=$(echo $version | cut -d. -f1)
             minor=$(echo $version | cut -d. -f2)
-            
+
             if [[ $major -ge 3 && $minor -ge 10 ]]; then
                 PYTHON_CMD=$cmd
                 break
@@ -295,10 +297,10 @@ if [[ -z "$PYTHON_CMD" ]]; then
 else
     # 升级 pip
     "$PYTHON_CMD" -m pip install --upgrade pip -q 2>/dev/null
-    
+
     # 安装/更新依赖
     "$PYTHON_CMD" -m pip install -r "$PROJECT_DIR/requirements.txt" -q 2>/dev/null
-    
+
     if [[ $? -eq 0 ]]; then
         echo -e "${GREEN}✓ 依赖更新完成${NC}"
     else
@@ -345,13 +347,13 @@ read -p "请选择 [1/2]: " START_CHOICE
 if [[ "$START_CHOICE" == "1" ]]; then
     echo ""
     echo "正在启动..."
-    
+
     if [[ -n "$PYTHON_CMD" ]]; then
         "$PYTHON_CMD" -m desktop_client &
     elif [[ -f "$PROJECT_DIR/start.sh" ]]; then
         bash "$PROJECT_DIR/start.sh" &
     fi
-    
+
     echo -e "${GREEN}✓ 应用已启动${NC}"
 fi
 
