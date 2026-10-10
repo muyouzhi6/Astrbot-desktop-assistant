@@ -135,6 +135,8 @@ setup_venv() {
 # 安装依赖
 install_dependencies() {
     if [ "$NEED_INSTALL" = true ] || [ ! -f "$VENV_DIR/.installed" ]; then
+        # 安装开始即撤销旧标记，失败后下次启动会自动重试。
+        rm -f "$VENV_DIR/.installed"
         print_info "安装依赖..."
 
         # 升级 pip
