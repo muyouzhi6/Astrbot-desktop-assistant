@@ -30,6 +30,35 @@ class _FakeSseContext:
 
 
 class TestAstrBotApiClientOpenApiMode:
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_legacy_login_sends_plain_password(self):
+        submitted = []
+
+        def respond(request):
+            submitted.append(json.loads(request.content))
+            return httpx.Response(
+                200, json={"status": "ok", "data": {"token": "fixture"}}
+            )
+
+        client = AstrBotApiClient(
+            "http://localhost:6185",
+            username="alice",
+            password="fixture-password",
+            auth_mode="legacy",
+        )
+        client._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(respond)
+        )
+        try:
+            success, _ = await client.login()
+            assert success
+            assert submitted == [
+                {"username": "alice", "password": "fixture-password"}
+            ]
+        finally:
+            await client.close()
+
     @pytest.mark.unit
     def test_openapi_headers_prefer_api_key(self):
         client = AstrBotApiClient(
@@ -331,6 +360,29 @@ class TestAstrBotApiClientOpenApiMode:
         assert kwargs["json"]["username"] == "alice"
         assert "session_id" not in kwargs["json"]
         http_client.aclose.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_send_message_reports_json_error_envelope(self):
+        client = AstrBotApiClient(
+            "http://localhost:6185", username="alice", api_key="fixture"
+        )
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"status": "error", "message": "Session rejected"}
+            )
+        )
+        client._create_sse_client = lambda: httpx.AsyncClient(
+            transport=transport
+        )
+
+        events = [
+            event async for event in client.send_message("session_001", "hi")
+        ]
+
+        assert [(event.event_type, event.data) for event in events] == [
+            ("error", "Session rejected")
+        ]
 
     @pytest.mark.asyncio
     @pytest.mark.unit

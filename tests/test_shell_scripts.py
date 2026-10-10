@@ -2,6 +2,7 @@
 
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import textwrap
@@ -33,6 +34,40 @@ def test_shell_checkout_uses_lf(name):
         ["git", "check-attr", "eol", "--", name], cwd=ROOT, text=True
     )
     assert attributes.strip().endswith(": lf")
+
+
+@pytest.mark.parametrize(
+    "name", ["start.sh", "install.sh", "quick_install.sh", "update.sh"]
+)
+def test_shell_git_checkout_is_executable(name, tmp_path):
+    """A fresh Git checkout must support the documented ./script.sh usage."""
+    entry = subprocess.check_output(
+        ["git", "ls-files", "--stage", "--", name], cwd=ROOT, text=True
+    )
+    assert entry.split()[0] == "100755", f"{name} loses +x on checkout"
+    if sys.platform == "win32":
+        return
+    checkout = tmp_path / "fresh checkout"
+    checkout.mkdir()
+    subprocess.run(
+        ["git", "checkout-index", f"--prefix={checkout}/", "--", name],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+    )
+    assert (checkout / name).stat().st_mode & stat.S_IXUSR
+
+
+def test_launcher_executes_directly(bash):
+    result = subprocess.run(
+        [str(ROOT / "start.sh"), "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "用法:" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -292,6 +327,9 @@ def test_shell_tests_without_bash_keep_lf_checks(tmp_path):
     }
     assert passed == {
         f"test_shell_checkout_uses_lf[{name}]"
+        for name in ["start.sh", "install.sh", "quick_install.sh", "update.sh"]
+    } | {
+        f"test_shell_git_checkout_is_executable[{name}]"
         for name in ["start.sh", "install.sh", "quick_install.sh", "update.sh"]
     }
     assert len(cases) > len(

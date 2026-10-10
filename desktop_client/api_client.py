@@ -9,7 +9,6 @@ AstrBot HTTP API 客户端
 """
 
 import asyncio
-import hashlib
 import json
 import logging
 import mimetypes
@@ -1326,10 +1325,6 @@ class AstrBotApiClient:
 
     # ========== 认证相关 ==========
 
-    def _hash_password(self, password: str) -> str:
-        """对密码进行 MD5 哈希处理（AstrBot 服务器端存储的是 MD5 哈希）"""
-        return hashlib.md5(password.encode("utf-8")).hexdigest()
-
     async def login(
         self, username: Optional[str] = None, password: Optional[str] = None
     ) -> tuple[bool, str]:
@@ -1360,15 +1355,12 @@ class AstrBotApiClient:
             self.state = ConnectionState.ERROR
             return False, "用户名或密码为空"
 
-        # AstrBot 服务器存储的是 MD5 哈希密码，需要对明文密码进行哈希
-        password_hash = self._hash_password(password)
-
         try:
             client = await self._ensure_client()
 
             response = await client.post(
                 f"{self.api_base}/auth/login",
-                json={"username": username, "password": password_hash},
+                json={"username": username, "password": password},
                 headers={"Content-Type": "application/json"},
             )
 
@@ -1810,6 +1802,24 @@ class AstrBotApiClient:
                     yield SSEEvent(
                         event_type="error",
                         data=f"HTTP {response.status_code}",
+                    )
+                    return
+
+                if "application/json" in getattr(response, "headers", {}).get(
+                    "content-type", ""
+                ):
+                    try:
+                        payload = json.loads(await response.aread())
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        payload = None
+                    detail = (
+                        payload.get("message") or payload.get("error")
+                        if isinstance(payload, dict)
+                        else None
+                    )
+                    yield SSEEvent(
+                        event_type="error",
+                        data=str(detail or "服务端未返回流式响应"),
                     )
                     return
 
