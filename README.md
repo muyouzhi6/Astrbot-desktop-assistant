@@ -426,9 +426,9 @@ MIT License
 [报告问题](https://github.com/muyouzhi6/Astrbot-desktop-assistant/issues) · [参与讨论](https://github.com/muyouzhi6/Astrbot-desktop-assistant/discussions) · [参与贡献](CONTRIBUTING.md)
 
 
-本插件开发QQ群：215532038
+本插件开发QQ群：木有知插件群 1105763429
 
-<img width="1284" height="2289" alt="qrcode_1767584668806" src="https://github.com/user-attachments/assets/113ccf60-044a-47f3-ac8f-432ae05f89ee" />
+<img width="1284" height="2283" alt="木有知插件群二维码" src="assets/plugin_group_qr.jpg" />
 
 
 
