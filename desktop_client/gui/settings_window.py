@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QToolButton,
     QFrame,
@@ -41,7 +42,12 @@ from qasync import asyncSlot
 from ..api_client import AstrBotApiClient
 from ..utils.autostart import is_autostart_enabled, set_autostart
 from ..services import get_chat_history_manager
-from ..config import ClientConfig, CustomThemeConfig, save_config
+from ..config import (
+    ClientConfig,
+    CustomThemeConfig,
+    DEFAULT_PROACTIVE_PROMPT_TEMPLATE,
+    save_config,
+)
 from ..pet_runtime.catalog import PetCatalog
 from .themes import theme_manager, Theme
 from .icons import icon_manager
@@ -1712,6 +1718,16 @@ class SettingsWindow(QWidget):
 
         layout.addWidget(time_section)
 
+        # 提示词模板设置
+        prompt_section = SettingsSection("提示词模板")
+        self._proactive_prompt_template = QPlainTextEdit()
+        self._proactive_prompt_template.setMaximumHeight(96)
+        self._proactive_prompt_template.setPlaceholderText(
+            "留空将使用默认提示词（保持原有 AstrBot 人设）"
+        )
+        prompt_section.add_widget(self._proactive_prompt_template)
+        layout.addWidget(prompt_section)
+
         # 说明信息
         info_section = SettingsSection("功能说明")
         info_label = QLabel(
@@ -2301,6 +2317,10 @@ class SettingsWindow(QWidget):
             self._proactive_time_range_end.setEnabled(
                 self.config.proactive.time_range_enabled
             )
+            self._proactive_prompt_template.setPlainText(
+                self.config.proactive.prompt_template
+                or DEFAULT_PROACTIVE_PROMPT_TEMPLATE
+            )
         else:
             # 使用默认值
             self._proactive_enabled.setChecked(False)
@@ -2313,6 +2333,9 @@ class SettingsWindow(QWidget):
             self._proactive_time_range_end.setTime(QTime(22, 0))
             self._proactive_time_range_start.setEnabled(False)
             self._proactive_time_range_end.setEnabled(False)
+            self._proactive_prompt_template.setPlainText(
+                DEFAULT_PROACTIVE_PROMPT_TEMPLATE
+            )
 
         # 存储设置
         if hasattr(self.config, "storage"):
@@ -2745,6 +2768,10 @@ class SettingsWindow(QWidget):
                 "time_range_end": self._proactive_time_range_end.time().toString(
                     "HH:mm"
                 ),
+                "prompt_template": (
+                    self._proactive_prompt_template.toPlainText().strip()
+                    or DEFAULT_PROACTIVE_PROMPT_TEMPLATE
+                ),
             },
             "storage": {
                 "image_save_path": self._image_save_path.text().strip(),
@@ -2873,6 +2900,9 @@ class SettingsWindow(QWidget):
             ]
             self.config.proactive.time_range_end = settings["proactive"][
                 "time_range_end"
+            ]
+            self.config.proactive.prompt_template = settings["proactive"][
+                "prompt_template"
             ]
 
             # 存储

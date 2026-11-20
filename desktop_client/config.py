@@ -316,6 +316,20 @@ class StorageConfig:
         return config_dir / "chat_history.json"
 
 
+LEGACY_PROACTIVE_PROMPT_TEMPLATE: str = """你是用户的桌面助手。现在请根据用户当前的屏幕内容，主动发起一段简短、自然的对话。
+要求：
+1. 像朋友一样自然地打招呼或发起话题
+2. 可以对屏幕内容进行简短评论或提供帮助
+3. 保持简洁，不超过2-3句话
+4. 语气轻松友好，不要太正式"""
+
+DEFAULT_PROACTIVE_PROMPT_TEMPLATE: str = (
+    "[主动对话触发] 这是用户当前的屏幕截图。"
+    "请严格保持你原有的人设、称呼与说话风格，不要改变自身身份设定，"
+    "结合屏幕内容自然地主动说 1-2 句简短的话。"
+)
+
+
 @dataclass
 class ProactiveDialogConfig:
     """主动对话配置"""
@@ -343,12 +357,7 @@ class ProactiveDialogConfig:
     # AI响应最大token数
     max_response_tokens: int = 50
     # 主动对话提示词模板
-    prompt_template: str = """你是用户的桌面助手。现在请根据用户当前的屏幕内容，主动发起一段简短、自然的对话。
-要求：
-1. 像朋友一样自然地打招呼或发起话题
-2. 可以对屏幕内容进行简短评论或提供帮助
-3. 保持简洁，不超过2-3句话
-4. 语气轻松友好，不要太正式"""
+    prompt_template: str = DEFAULT_PROACTIVE_PROMPT_TEMPLATE
 
 
 @dataclass
@@ -519,8 +528,13 @@ class ClientConfig:
 
             # 加载主动对话配置
             if "proactive" in data:
+                legacy_prompt = LEGACY_PROACTIVE_PROMPT_TEMPLATE.replace("\r\n", "\n").strip()
                 for key, value in data["proactive"].items():
                     if hasattr(config.proactive, key):
+                        if key == "prompt_template" and isinstance(value, str):
+                            normalized = value.replace("\r\n", "\n").strip()
+                            if not normalized or normalized == legacy_prompt:
+                                value = DEFAULT_PROACTIVE_PROMPT_TEMPLATE
                         setattr(config.proactive, key, value)
 
             # 加载存储配置

@@ -29,6 +29,8 @@ from desktop_client.config import (
     VoiceConfig,
     StorageConfig,
     ProactiveDialogConfig,
+    DEFAULT_PROACTIVE_PROMPT_TEMPLATE,
+    LEGACY_PROACTIVE_PROMPT_TEMPLATE,
     CustomThemeConfig,
     load_config,
     save_config,
@@ -180,7 +182,35 @@ class TestProactiveDialogConfig:
         assert config.screenshot_width == 800
         assert config.screenshot_height == 600
         assert config.max_response_tokens == 50
-        assert "桌面助手" in config.prompt_template
+        assert config.prompt_template == DEFAULT_PROACTIVE_PROMPT_TEMPLATE
+        assert "你是用户的桌面助手" not in config.prompt_template
+        assert "原有的人设" in config.prompt_template
+
+    @pytest.mark.unit
+    def test_legacy_default_prompt_migrates_without_overwriting_custom(self, tmp_path):
+        """旧版默认提示词自动迁移为保人设模板，自定义模板保持不变"""
+        legacy_path = tmp_path / "legacy_config.json"
+        legacy_path.write_text(
+            json.dumps(
+                {"proactive": {"prompt_template": LEGACY_PROACTIVE_PROMPT_TEMPLATE}},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        loaded_legacy = ClientConfig.load(str(legacy_path))
+        assert loaded_legacy.proactive.prompt_template == DEFAULT_PROACTIVE_PROMPT_TEMPLATE
+
+        custom_prompt = "按猫娘口吻简短评论当前屏幕"
+        custom_path = tmp_path / "custom_config.json"
+        custom_path.write_text(
+            json.dumps(
+                {"proactive": {"prompt_template": custom_prompt}},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        loaded_custom = ClientConfig.load(str(custom_path))
+        assert loaded_custom.proactive.prompt_template == custom_prompt
 
 
 class TestPetRuntimeConfig:
